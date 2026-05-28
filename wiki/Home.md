@@ -15,6 +15,7 @@ an educational, single-RTX-5090 reproduction of *GeoFM* (Zhang et al., 2025, arX
 * [05 — Qwen2-VL Fine-tuning](./05-Qwen2VL-Finetuning) — TRL SFTTrainer, LoRA configs, VRAM budget.
 * [06 — Evaluation](./06-Evaluation) — VLMEvalKit, MathVista-GPS, GeoQA, judge cost.
 * [07 — Blackwell Setup Log](./07-Blackwell-Setup-Log) — Running pain-log: error → fix → upstream issue.
+* [Blog post draft](./blog-post-draft) — *Reproducing Tencent's GeoFM on a single RTX 5090* — narrative companion to the wiki.
 
 ## How to read this wiki
 

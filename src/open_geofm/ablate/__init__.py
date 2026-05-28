@@ -11,4 +11,4 @@ Blueprint §2 Phase 9. CPU-only; no torch / vllm imports.
 
 from .sweep import SweepPoint, plot_sweep, scale_curve, to_markdown_sweep
 
-__all__ = ["SweepPoint", "scale_curve", "plot_sweep", "to_markdown_sweep"]
+__all__ = ["SweepPoint", "plot_sweep", "scale_curve", "to_markdown_sweep"]

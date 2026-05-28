@@ -28,7 +28,6 @@ from open_geofm.ablate.sweep import (
 )
 from open_geofm.eval.compare import scan_work_dir
 
-
 # ---------------------------------------------------------------------------
 # Parsers
 # ---------------------------------------------------------------------------

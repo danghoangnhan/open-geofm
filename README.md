@@ -24,6 +24,10 @@
 
 ## Pipeline
 
+![open-geofm pipeline diagram](wiki/img/pipeline.svg)
+
+(Same flow, as Mermaid:)
+
 ```mermaid
 flowchart LR
   A[FormalGeo7K seed] --> B[Algorithm 1<br/>metric swap]
