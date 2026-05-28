@@ -12,7 +12,7 @@ license: apache-2.0
 
 # open-geofm — Hugging Face Spaces demo
 
-Gradio app for the [open-geofm](https://github.com/CallMeDaniel/open-geofm)
+Gradio app for the [open-geofm](https://github.com/danghoangnhan/open-geofm)
 educational reproduction of *GeoFM* (Zhang et al., 2025, arXiv:2510.27448).
 
 * Upload (or pick from the example carousel) a geometric figure.
@@ -51,11 +51,11 @@ UI is fully interactive so you can iterate on layout without GPU time.
 
 ```bash
 # One-time: create the Space.
-gh repo create CallMeDaniel/open-geofm-demo --public --description "open-geofm Gradio demo"
+gh repo create danghoangnhan/open-geofm-demo --public --description "open-geofm Gradio demo"
 
 # Push.
 huggingface-cli repo create open-geofm-demo --type space --space_sdk gradio
-git clone https://huggingface.co/spaces/CallMeDaniel/open-geofm-demo
+git clone https://huggingface.co/spaces/danghoangnhan/open-geofm-demo
 cp app.py requirements.txt README.md examples/* open-geofm-demo/
 cd open-geofm-demo && git add . && git commit -m "deploy" && git push
 ```

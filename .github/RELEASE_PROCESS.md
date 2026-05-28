@@ -1,6 +1,6 @@
 # Release process
 
-This repo uses [GitHub releases](https://github.com/CallMeDaniel/open-geofm/releases) +
+This repo uses [GitHub releases](https://github.com/danghoangnhan/geofm/releases) +
 [Zenodo](https://zenodo.org) to mint a citable DOI per tag. Pretty much
 follows the Citation File Format (CFF) recipe — but documented in one place so
 the next release isn't a treasure hunt through six tabs.
@@ -9,7 +9,7 @@ the next release isn't a treasure hunt through six tabs.
 lists the repo with the toggle ON)
 
 1. Sign into Zenodo with the GitHub identity that owns the repo.
-2. Go to **Settings → GitHub** and flip the **open-geofm** toggle ON.
+2. Go to **Settings → GitHub** and flip the **danghoangnhan/geofm** toggle ON.
 3. Trigger a release (next section). Zenodo will mint a DOI within a couple of
    minutes.
 
@@ -71,9 +71,9 @@ dataset card.
 ## Adapter releases
 
 LoRA adapters land at:
-* `CallMeDaniel/Qwen2-VL-2B-OpenGeoFM-LoRA` (headline)
-* `CallMeDaniel/Qwen2-VL-7B-OpenGeoFM-LoRA`
-* `CallMeDaniel/Qwen2.5-VL-7B-OpenGeoFM-LoRA`
+* `danghoangnhan/Qwen2-VL-2B-OpenGeoFM-LoRA` (headline)
+* `danghoangnhan/Qwen2-VL-7B-OpenGeoFM-LoRA`
+* `danghoangnhan/Qwen2.5-VL-7B-OpenGeoFM-LoRA`
 
 Each Hub release should pin the matching open-geofm code tag in the model
 card's `model_creator` / `base_model` fields so users can reproduce the LoRA

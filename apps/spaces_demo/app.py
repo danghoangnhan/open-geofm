@@ -7,7 +7,7 @@ statement. Runs on the free A10G tier.
 Environment variables (set in Space → Settings → Variables):
 * ``OPEN_GEOFM_BASE_MODEL``  — base model id (default ``Qwen/Qwen2-VL-2B-Instruct``).
 * ``OPEN_GEOFM_LORA_ID``     — optional Hub LoRA adapter id (e.g.
-  ``CallMeDaniel/Qwen2-VL-2B-OpenGeoFM-LoRA``). If unset the base model runs
+  ``danghoangnhan/Qwen2-VL-2B-OpenGeoFM-LoRA``). If unset the base model runs
   with a banner explaining the LoRA delta hasn't been wired yet.
 * ``OPEN_GEOFM_MAX_NEW_TOKENS`` — default 512.
 
@@ -140,8 +140,8 @@ with gr.Blocks(title="open-geofm — geometry-MLLM demo") as demo:
         Educational reproduction of *GeoFM* (Zhang et al., 2025, arXiv:2510.27448).
         Upload a geometric figure (or pick an example) and ask the model a question.
 
-        **Source:** [github.com/CallMeDaniel/open-geofm](https://github.com/CallMeDaniel/open-geofm)
-        **Method:** see the [wiki](https://github.com/CallMeDaniel/open-geofm/wiki).
+        **Source:** [github.com/danghoangnhan/geofm](https://github.com/danghoangnhan/geofm)
+        **Method:** see the [wiki](https://github.com/danghoangnhan/geofm/wiki).
         """
     )
     gr.Markdown(_model_banner())

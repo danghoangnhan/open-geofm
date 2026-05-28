@@ -1,9 +1,9 @@
 # open-geofm wiki
 
-Pedagogical documentation for [`open-geofm`](https://github.com/CallMeDaniel/open-geofm),
+Pedagogical documentation for [`open-geofm`](https://github.com/danghoangnhan/geofm),
 an educational, single-RTX-5090 reproduction of *GeoFM* (Zhang et al., 2025, arXiv:2510.27448).
 
-> **This is not the official GeoFM code.** See the [README](https://github.com/CallMeDaniel/open-geofm#readme) for the IS / IS NOT table.
+> **This is not the official GeoFM code.** See the [README](https://github.com/danghoangnhan/geofm#readme) for the IS / IS NOT table.
 
 ## Contents
 
