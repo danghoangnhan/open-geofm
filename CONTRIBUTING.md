@@ -7,7 +7,7 @@ learner's experience** are especially welcome.
 ## Quick start
 
 ```bash
-git clone https://github.com/CallMeDaniel/open-geofm
+git clone https://github.com/danghoangnhan/open-geofm
 cd open-geofm
 uv sync --extra dev
 uv run pre-commit install
@@ -17,7 +17,7 @@ uv run pytest -q
 ## Workflow
 
 1. **Open an issue** before large changes — describe what you'd improve and which
-   pedagogical phase it belongs to (see [wiki/00-Overview](https://github.com/CallMeDaniel/open-geofm/wiki/00-Overview)).
+   pedagogical phase it belongs to (see [wiki/00-Overview](https://github.com/danghoangnhan/open-geofm/wiki/00-Overview)).
 2. **Branch off `main`**, write your change, run the tests.
 3. **Sign off your commits** (Developer Certificate of Origin):
    ```bash

@@ -1,0 +1,10 @@
+# Hugging Face Spaces — runtime deps for the Gradio demo.
+# Pinned to versions known to work on the free A10G tier (24 GB VRAM, CUDA 12.x).
+gradio>=4.44.0,<5
+torch>=2.4.0
+transformers>=4.46.0
+accelerate>=0.34
+peft>=0.13
+qwen-vl-utils>=0.0.10
+pillow>=10
+sentencepiece>=0.2.0

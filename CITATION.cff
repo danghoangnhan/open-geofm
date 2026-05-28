@@ -6,10 +6,12 @@ abstract: >-
   methodology of GeoFM (Zhang et al., 2025, arXiv:2510.27448), targeting
   Qwen2-VL-2B/7B and Qwen2.5-VL-7B on an RTX 5090 (sm_120).
 type: software
+version: 0.1.0
+date-released: 2026-05-28
 authors:
   - name: "open-geofm contributors"
-repository-code: "https://github.com/CallMeDaniel/open-geofm"
-url: "https://github.com/CallMeDaniel/open-geofm"
+repository-code: "https://github.com/danghoangnhan/open-geofm"
+url: "https://github.com/danghoangnhan/open-geofm"
 license: Apache-2.0
 keywords:
   - geometry

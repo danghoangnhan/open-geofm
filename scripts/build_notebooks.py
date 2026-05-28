@@ -41,7 +41,7 @@ def _load_spec(path: Path) -> tuple[str, list[tuple[str, str]]]:
     sys.modules[spec.name] = mod
     spec.loader.exec_module(mod)
     title = getattr(mod, "TITLE", path.stem)
-    cells = getattr(mod, "CELLS")
+    cells = mod.CELLS
     return title, cells
 
 

@@ -7,6 +7,10 @@ renderer + verifier pipeline.
 
 ## Pipeline
 
+![open-geofm pipeline diagram](img/pipeline.svg)
+
+(The same flow, in Mermaid for editors that don't render SVG inline:)
+
 ```mermaid
 flowchart TD
   subgraph CPU [CPU phases — host uv venv]
@@ -54,12 +58,11 @@ src/open_geofm/
 
 * **Run the smoke tests**:
   ```bash
-  uv sync
+  uv sync --extra formal --extra dev
   uv run pytest -q
   ```
-  Today these pass `test_algorithm1_invariants.py` and `test_nlg_backend.py`,
-  and `xfail` everywhere a Phase 1+ stub still lives. As you implement each
-  phase, more tests flip green.
+  The host-side suite currently runs **167 tests in ~20 s** (2 skipped require
+  the `datasets` GPU extra).
 * **Read [02 — Condition Sampling](./02-Condition-Sampling)** — that's where
   the paper's novel contribution is.
 * **Watch [07 — Blackwell Setup Log](./07-Blackwell-Setup-Log)** — it's the

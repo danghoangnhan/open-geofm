@@ -1,0 +1,107 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 460" font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="14">
+  <title>open-geofm pipeline — seed to evaluation</title>
+  <desc>
+    Phase pipeline for the open-geofm educational reproduction. A FormalGeo7K
+    seed problem is expanded by Algorithm 1's metric swap and verified by FGPS;
+    the result is split into a diagram-rendering arm (matplotlib or GMBL-style)
+    and a natural-language arm (predicate templates plus LLM rewriter, then a
+    symbolic verifier). Both arms feed the bundled-CDL HF dataset, which is
+    LoRA-fine-tuned via TRL and evaluated with VLMEvalKit.
+  </desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#334155"/>
+    </marker>
+    <style>
+      .phase  { fill: #f8fafc; stroke: #334155; stroke-width: 2; rx: 14; ry: 14; }
+      .data   { fill: #fef3c7; stroke: #92400e; stroke-width: 2; rx: 14; ry: 14; }
+      .train  { fill: #dbeafe; stroke: #1e3a8a; stroke-width: 2; rx: 14; ry: 14; }
+      .eval   { fill: #dcfce7; stroke: #14532d; stroke-width: 2; rx: 14; ry: 14; }
+      .label  { fill: #0f172a; font-weight: 600; text-anchor: middle; }
+      .sub    { fill: #475569; font-size: 11px; text-anchor: middle; }
+      .edge   { fill: none; stroke: #334155; stroke-width: 1.8; marker-end: url(#arrow); }
+      .lane   { fill: #94a3b8; font-size: 12px; font-style: italic; text-anchor: start; }
+      .title  { fill: #0f172a; font-weight: 700; font-size: 18px; text-anchor: middle; }
+    </style>
+  </defs>
+
+  <!-- Title -->
+  <text class="title" x="640" y="32">open-geofm pipeline (Phases 1 – 8)</text>
+
+  <!-- Phase labels (left margin) -->
+  <text class="lane" x="20" y="105">data gen (CPU)</text>
+  <text class="lane" x="20" y="235">verify + render</text>
+  <text class="lane" x="20" y="345">dataset + train (GPU)</text>
+  <text class="lane" x="20" y="430">eval (GPU)</text>
+
+  <!-- Row 1 — data gen -->
+  <g>
+    <rect class="data"  x="160" y="80" width="180" height="60"/>
+    <text class="label" x="250" y="105">FormalGeo7K seed</text>
+    <text class="sub"   x="250" y="124">Phase 1 · loader + CDL</text>
+
+    <rect class="phase" x="380" y="80" width="180" height="60"/>
+    <text class="label" x="470" y="105">Algorithm 1 swap</text>
+    <text class="sub"   x="470" y="124">Phase 2 · BFS + RNG swap</text>
+
+    <rect class="phase" x="600" y="80" width="180" height="60"/>
+    <text class="label" x="690" y="105">FGPS symbolic solver</text>
+    <text class="sub"   x="690" y="124">Phase 3 · verify answer</text>
+  </g>
+
+  <!-- Row 2 — render + nlg -->
+  <g>
+    <rect class="phase" x="820" y="200" width="180" height="60"/>
+    <text class="label" x="910" y="225">Renderer</text>
+    <text class="sub"   x="910" y="245">Phase 4 · mpl | GMBL</text>
+
+    <rect class="phase" x="600" y="200" width="180" height="60"/>
+    <text class="label" x="690" y="225">NL draft + LLM rewrite</text>
+    <text class="sub"   x="690" y="245">Phase 5 · template + smooth</text>
+
+    <rect class="phase" x="380" y="200" width="180" height="60"/>
+    <text class="label" x="470" y="225">Answer verify</text>
+    <text class="sub"   x="470" y="245">Phase 3 · sympy 1e-3 tol</text>
+  </g>
+
+  <!-- Row 3 — dataset + train + eval -->
+  <g>
+    <rect class="data"  x="600" y="320" width="180" height="60"/>
+    <text class="label" x="690" y="345">open-geofm-mini-{5,10,20}k</text>
+    <text class="sub"   x="690" y="364">Phase 6 · JSONL + HF + CDLs</text>
+
+    <rect class="train" x="820" y="320" width="180" height="60"/>
+    <text class="label" x="910" y="345">TRL SFTTrainer LoRA</text>
+    <text class="sub"   x="910" y="364">Phase 7 · Qwen2(.5)-VL</text>
+
+    <rect class="eval"  x="1040" y="320" width="200" height="60"/>
+    <text class="label" x="1140" y="345">VLMEvalKit + ablate</text>
+    <text class="sub"   x="1140" y="364">Phase 8 + 9 · MathVista, GeoQA</text>
+  </g>
+
+  <!-- Edges row 1 -->
+  <path class="edge" d="M340,110 L380,110"/>
+  <path class="edge" d="M560,110 L600,110"/>
+
+  <!-- Branch from FGPS into the two parallel arms -->
+  <path class="edge" d="M780,110 C 820,110 870,150 910,200"/>
+  <path class="edge" d="M690,140 L690,200"/>
+
+  <!-- NL → verify -->
+  <path class="edge" d="M600,230 L560,230"/>
+
+  <!-- Renderer + verify → dataset -->
+  <path class="edge" d="M910,260 L910,290 L780,290 L740,320"/>
+  <path class="edge" d="M470,260 L470,290 L600,290 L640,320"/>
+
+  <!-- Dataset → train → eval -->
+  <path class="edge" d="M780,350 L820,350"/>
+  <path class="edge" d="M1000,350 L1040,350"/>
+
+  <!-- Footer hint -->
+  <text class="sub" x="640" y="430" text-anchor="middle">
+    yellow = data, white = CPU phase, blue = training, green = evaluation · arrows show data flow
+  </text>
+</svg>

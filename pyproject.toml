@@ -49,9 +49,9 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/CallMeDaniel/open-geofm"
-Issues   = "https://github.com/CallMeDaniel/open-geofm/issues"
-Wiki     = "https://github.com/CallMeDaniel/open-geofm/wiki"
+Homepage = "https://github.com/danghoangnhan/open-geofm"
+Issues   = "https://github.com/danghoangnhan/open-geofm/issues"
+Wiki     = "https://github.com/danghoangnhan/open-geofm/wiki"
 Paper    = "https://arxiv.org/abs/2510.27448"
 
 [build-system]
