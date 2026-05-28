@@ -35,7 +35,7 @@ flowchart LR
   C --> D[Renderer<br/>matplotlib / GMBL]
   C --> E[NL templates<br/>+ LLM rewriter]
   E --> F[Answer verify<br/>vs FGPS]
-  D --> G[HF dataset<br/>open-geofm-mini-{5,10,20}K]
+  D --> G["HF dataset<br/>open-geofm-mini-{5,10,20}K"]
   F --> G
   G --> H[TRL SFTTrainer<br/>LoRA Qwen2-VL]
   H --> I[VLMEvalKit<br/>MathVista-GPS, GeoQA, ...]
