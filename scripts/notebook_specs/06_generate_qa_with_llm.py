@@ -190,14 +190,21 @@ for nl, fgps in cases:
         """\
 ## 5. Algorithm 1 + the verify-reject loop
 
-`run_algorithm1(..., rewrite_fn=..., verify_fn=...)` wires everything:
-gather → swap → goal → solve → rewrite → verify → append. Each rejected
-swap costs one attempt; `max_attempts_factor` bounds wall-clock per
-seed.
+`run_algorithm1(...)` wires everything: gather → swap → goal → solve →
+rewrite → verify → append. Each rejected swap costs one attempt;
+`max_attempts_factor` bounds wall-clock per seed.
 
-Here we drive it with the stub rewriter (returns the right answer
-every time, so all accepted) and the real `nlg.verify` so we can
-inspect the trace of acceptance.
+Notebooks should call `run_algorithm1_in_subprocess(...)` instead of
+the driver directly — it runs the same code inside a spawn-context
+child process with a hard wall-clock budget, so a FGPS C-extension
+deadlock can SIGKILL the child without bringing down the kernel. The
+production driver `scripts/02_generate_dataset.py` already runs in a
+multiprocess pool and doesn't need the wrapper.
+
+The wrapper's `rewriter='template'` selects the production
+`templates.draft_nl` + a brief solution suffix (same as the rest of
+this notebook). `rewriter='stub'` swaps in the fixed NL pair used by
+notebook 03.
 """,
     ),
     (
@@ -207,27 +214,26 @@ import warnings
 warnings.filterwarnings('ignore')   # silence FGPS's EE-check UserWarnings
 
 from open_geofm.formal.loader import load_problem
-from open_geofm.formal.solver import solve as fgps_solve
-from open_geofm.nlg.verify import verify as nlg_verify
-from open_geofm.sampling.algorithm1 import run_algorithm1
-from open_geofm.sampling.gather_metrics import gather_metric_info
+from open_geofm.sampling.safe_run import run_algorithm1_in_subprocess
 
 
-def rewrite_fn(problem, fgps_answer: str) -> tuple[str, str]:
-    draft = draft_nl(problem.text_cdl + problem.image_cdl, problem.goal_cdl)
-    return stub_rewriter(draft, fgps_answer)
-
-
+# `run_algorithm1_in_subprocess` runs the driver in a spawn-context child
+# process with a hard wall-clock budget. If FGPS deadlocks inside a
+# C-extension call (rare but possible — see `safe_run.py` docstring) the
+# child is SIGKILL'd and the parent kernel survives. Notebooks should use
+# this wrapper; the production driver (scripts/02_generate_dataset.py)
+# already runs in a multiprocess pool and can SIGKILL workers directly.
 seed = load_problem(200)   # PID=200 (Value(x), answer=sqrt(161)), |M_p|=8, fast BFS
-samples = run_algorithm1(
+samples = run_algorithm1_in_subprocess(
     [seed],
     m_per_seed=2,
-    seed=42,
-    rewrite_fn=rewrite_fn,
-    verify_fn=lambda nl, exp: nlg_verify(nl, exp).accepted,
-    gather_fn=lambda problem: gather_metric_info(problem, max_depth=1, timeout_s=90.0),
-    solve_fn=lambda problem: fgps_solve(problem, timeout_s=60.0),
+    rng_seed=42,
+    rewriter='template',           # the production NL templating, not the in-cell stub
+    gather_timeout_s=90.0,
+    solve_timeout_s=60.0,
+    bfs_depth=1,
     max_attempts_factor=20,
+    process_timeout_s=180.0,
 )
 print(f'accepted = {len(samples)}')
 for i, s in enumerate(samples, 1):
