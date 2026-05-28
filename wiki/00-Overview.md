@@ -20,12 +20,12 @@ flowchart TD
     C --> E[NL templates]
     E --> F[LLM rewriter<br/>Qwen2.5-7B or gpt-4o-mini]
     F --> G[Answer verify<br/>vs FGPS]
-    D --> H[HF dataset<br/>open-geofm-mini-{5,10,20}K]
+    D --> H["HF dataset<br/>open-geofm-mini-{5,10,20}K"]
     G --> H
   end
   subgraph GPU [GPU phases — Docker NGC 25.02]
     H --> I[TRL SFTTrainer<br/>LoRA r=16, all-linear]
-    I --> J[Adapter on HF Hub<br/>Qwen2-VL-{2B,7B}-OpenGeoFM-LoRA]
+    I --> J["Adapter on HF Hub<br/>Qwen2-VL-{2B,7B}-OpenGeoFM-LoRA"]
     J --> K[VLMEvalKit<br/>MathVista-GPS · GeoQA · ...]
   end
 ```
