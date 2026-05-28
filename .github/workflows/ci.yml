@@ -21,8 +21,13 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
 
-      - name: Sync deps (base only — no GPU extras in CI)
-        run: uv sync --extra dev
+      - name: Sync deps (formal + dev — no GPU extras in CI)
+        # `--extra formal` brings in `formalgeo` (the FormalGeo7K loader +
+        # FGPS searcher). Without it, every test file that imports
+        # `open_geofm.formal.*` or `sampling.*` fails collection on
+        # `ModuleNotFoundError: formalgeo`. The torch/train/eval extras stay
+        # out of CI — those are the GPU phases.
+        run: uv sync --extra formal --extra dev
 
       - name: Ruff
         run: uv run ruff check src tests scripts

@@ -27,6 +27,13 @@ dependencies = [
   "pydantic>=2",
   "tqdm",
   "typer",
+  # `func_timeout` is used by `formal.solver`, `sampling.gather_metrics`, and
+  # `sampling.safe_run` to wrap FGPS calls in a wall-clock timeout. It was
+  # entering the venv transitively via `formalgeo` (the `formal` extra), but
+  # that left module imports broken in a base `uv sync` and in CI runs that
+  # don't include `--extra formal`. Declare it at the base level so the
+  # import graph is honest.
+  "func_timeout",
 ]
 
 [project.optional-dependencies]
