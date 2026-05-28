@@ -67,7 +67,7 @@ docker compose -f docker/docker-compose.yml run --rm train \
     bash scripts/04_eval.sh qwen2vl_2b_lora outputs/qwen2vl-2b-lora
 ```
 
-Full ten-week phase plan + Blackwell pain-log: see the **[wiki](https://github.com/danghoangnhan/geofm/wiki)**.
+Full ten-week phase plan + Blackwell pain-log: see the **[wiki](https://github.com/danghoangnhan/open-geofm/wiki)**.
 
 ---
 
@@ -116,7 +116,7 @@ If you use this implementation, please cite **both** the original GeoFM paper an
   title  = {open-geofm: An educational reproduction of GeoFM on a single RTX 5090},
   author = {open-geofm contributors},
   year   = {2026},
-  url    = {https://github.com/danghoangnhan/geofm}
+  url    = {https://github.com/danghoangnhan/open-geofm}
 }
 ```
 

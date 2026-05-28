@@ -140,8 +140,8 @@ with gr.Blocks(title="open-geofm — geometry-MLLM demo") as demo:
         Educational reproduction of *GeoFM* (Zhang et al., 2025, arXiv:2510.27448).
         Upload a geometric figure (or pick an example) and ask the model a question.
 
-        **Source:** [github.com/danghoangnhan/geofm](https://github.com/danghoangnhan/geofm)
-        **Method:** see the [wiki](https://github.com/danghoangnhan/geofm/wiki).
+        **Source:** [github.com/danghoangnhan/open-geofm](https://github.com/danghoangnhan/open-geofm)
+        **Method:** see the [wiki](https://github.com/danghoangnhan/open-geofm/wiki).
         """
     )
     gr.Markdown(_model_banner())

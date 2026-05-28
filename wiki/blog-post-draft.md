@@ -14,7 +14,7 @@ Hunyuan's *GeoFM* paper (Zhang et al., 2025,
 [arXiv:2510.27448](https://arxiv.org/abs/2510.27448)) on a single RTX 5090.
 The full code, ten Jupyter notebooks, a wiki, and a Hugging Face Space
 demoing the trained adapter live at
-[github.com/danghoangnhan/geofm](https://github.com/danghoangnhan/geofm).
+[github.com/danghoangnhan/open-geofm](https://github.com/danghoangnhan/open-geofm).
 
 You are not going to match Tencent's headline numbers. They had 80,000
 samples and a full-parameter SFT of LLaVA-NeXT-8B / InternVL2-8B-MPO on an
@@ -336,7 +336,7 @@ Gradio Spaces demo. v1.1 adds:
 
 Contributions welcome — see `CONTRIBUTING.md`. The most-requested
 next-steps tracked in
-[issues](https://github.com/danghoangnhan/geofm/issues) are
+[issues](https://github.com/danghoangnhan/open-geofm/issues) are
 diagram-augmentation policies, alternative base models, and a
 data-scale extrapolation beyond 20K.
 
@@ -349,7 +349,7 @@ try-it. Citation block (CC-BY-4.0):
   title  = {open-geofm: An educational reproduction of GeoFM on a single RTX 5090},
   author = {open-geofm contributors},
   year   = {2026},
-  url    = {https://github.com/danghoangnhan/geofm}
+  url    = {https://github.com/danghoangnhan/open-geofm}
 }
 ```
 

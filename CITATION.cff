@@ -10,8 +10,8 @@ version: 0.1.0
 date-released: 2026-05-28
 authors:
   - name: "open-geofm contributors"
-repository-code: "https://github.com/danghoangnhan/geofm"
-url: "https://github.com/danghoangnhan/geofm"
+repository-code: "https://github.com/danghoangnhan/open-geofm"
+url: "https://github.com/danghoangnhan/open-geofm"
 license: Apache-2.0
 keywords:
   - geometry
