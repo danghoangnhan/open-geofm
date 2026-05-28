@@ -1,0 +1,31 @@
+# uv / Python
+.venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+build/
+dist/
+
+# data + outputs (gitignored, regenerated)
+data/
+outputs/
+checkpoints/
+wandb/
+mlruns/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# secrets
+.env
+.env.local
+
+# uv lock kept in repo; ignore site-packages
+.python-version.local

@@ -1,0 +1,26 @@
+name: wiki-sync
+
+# Pushes anything under `wiki/` on `main` to the repo's GitHub wiki
+# (separate git repo at `<repo>.wiki.git`). Source of truth is `wiki/` in this
+# repo, so wiki edits go through PR review.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "wiki/**"
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Push wiki/ to GitHub Wiki
+        uses: Andrew-Chen-Wang/github-wiki-action@v4
+        with:
+          path: wiki/
+          token: ${{ secrets.GITHUB_TOKEN }}

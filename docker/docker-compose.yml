@@ -1,0 +1,31 @@
+services:
+  # Blackwell training image. Mounts the repo + cache so weights and datasets
+  # persist between runs.
+  train:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.blackwell
+    image: open-geofm:blackwell
+    runtime: nvidia
+    shm_size: "16g"
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      HF_HOME: /workspace/.cache/huggingface
+      OPEN_GEOFM_REWRITER: ${OPEN_GEOFM_REWRITER:-local}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      WANDB_API_KEY: ${WANDB_API_KEY:-}
+    volumes:
+      - ../:/workspace
+      - hf-cache:/workspace/.cache/huggingface
+    working_dir: /workspace
+    command: ["uv", "run", "python", "scripts/00_verify_env.py"]
+
+  # Same image, but drop into a shell.
+  shell:
+    extends: train
+    command: ["/bin/bash"]
+    tty: true
+    stdin_open: true
+
+volumes:
+  hf-cache:

@@ -1,0 +1,112 @@
+[project]
+name = "open-geofm"
+version = "0.1.0"
+description = "Educational reproduction of GeoFM (Zhang et al., 2025, arXiv:2510.27448) on a single RTX 5090."
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+authors = [{ name = "open-geofm contributors" }]
+keywords = ["geometry", "multimodal", "qwen2-vl", "formal-language", "education"]
+classifiers = [
+  "License :: OSI Approved :: Apache Software License",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Intended Audience :: Education",
+]
+
+# Base deps: CPU-only phases (FormalGeo, sampling, verify, render, NLG templates,
+# dataset assembly). Heavy GPU deps live in optional-dependencies so the host
+# uv venv stays small and doesn't pull torch with CUDA.
+dependencies = [
+  "numpy",
+  "pillow",
+  "scipy",
+  "sympy",
+  "matplotlib",
+  "networkx",
+  "pydantic>=2",
+  "tqdm",
+  "typer",
+]
+
+[project.optional-dependencies]
+# GPU phases — installed inside the Docker image only.
+torch = ["torch>=2.7", "transformers>=4.46", "accelerate", "datasets"]
+train = ["trl>=0.12", "peft>=0.13", "bitsandbytes"]
+eval  = ["vllm>=0.8.0", "openai", "vlmeval"]
+nlg   = ["openai"]
+# Formal-engine wrappers — Python only, CPU.
+formal = ["formalgeo"]  # PyPI name to verify in Phase 1 setup
+
+dev = [
+  "pytest",
+  "pytest-cov",
+  "ruff",
+  "black",
+  "pre-commit",
+  "jupyter",
+  "ipykernel",
+]
+
+[project.urls]
+Homepage = "https://github.com/CallMeDaniel/open-geofm"
+Issues   = "https://github.com/CallMeDaniel/open-geofm/issues"
+Wiki     = "https://github.com/CallMeDaniel/open-geofm/wiki"
+Paper    = "https://arxiv.org/abs/2510.27448"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/open_geofm"]
+
+# ---------------------------------------------------------------------------
+# uv configuration
+# ---------------------------------------------------------------------------
+[tool.uv]
+# Default install pulls only base deps; opt into [torch] / [train] / [eval]
+# explicitly inside the Docker image.
+default-groups = []
+
+# Blackwell PyTorch index for cu128 wheels (Phase 0 of the plan).
+[[tool.uv.index]]
+name     = "pytorch-cu128"
+url      = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch   = { index = "pytorch-cu128" }
+vlmeval = { git = "https://github.com/open-compass/VLMEvalKit" }
+
+# ---------------------------------------------------------------------------
+# Tooling
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "RUF"]
+# RUF001-003: math Unicode (∪, −, ∥, ⊥, etc.) is intentional in CDL docstrings.
+# E501: line length handled by black.
+ignore = ["E501", "RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.flake8-bugbear]
+# Typer's idiomatic CLI shape places `typer.Option(...)` / `typer.Argument(...)`
+# in parameter defaults. Treat them as immutable so B008 doesn't fight every
+# new CLI we add.
+extend-immutable-calls = ["typer.Option", "typer.Argument"]
+
+[tool.black]
+line-length = 100
+target-version = ["py312"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers"
+markers = [
+  "gpu: requires a CUDA-capable GPU (skipped in CPU-only CI)",
+  "slow: long-running test (skipped by default)",
+  "integration: end-to-end pipeline test",
+]

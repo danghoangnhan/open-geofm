@@ -1,0 +1,48 @@
+# open-geofm: Blackwell (sm_120) training image.
+# Blueprint §0 + §4. Base = NGC PyTorch 25.02 (CUDA 12.8, sm_120 wheels). uv is
+# the package manager. FlashAttention 2 + bitsandbytes are built from source
+# against CUDA 12.8 because their PyPI wheels lack sm_120 kernels as of May 2026.
+
+FROM nvcr.io/nvidia/pytorch:25.02-py3
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    UV_PROJECT_ENVIRONMENT=/opt/venv \
+    UV_LINK_MODE=copy \
+    UV_COMPILE_BYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    TORCH_CUDA_ARCH_LIST="12.0;12.0+PTX" \
+    VLLM_FLASH_ATTN_VERSION=2
+
+# uv (single static binary, replaces pip).
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+ && mv /root/.local/bin/uv /usr/local/bin/uv \
+ && mv /root/.local/bin/uvx /usr/local/bin/uvx
+
+WORKDIR /workspace
+
+# Pre-sync deps using only the manifest + lockfile (faster cache layer).
+COPY pyproject.toml uv.lock* ./
+RUN uv sync --frozen --no-install-project \
+            --extra torch --extra train --extra eval --extra nlg --extra formal \
+ || uv sync --no-install-project \
+            --extra torch --extra train --extra eval --extra nlg --extra formal
+
+# FlashAttention 2 from source (FA4 cannot run on sm_120 - blueprint §4, Dao-AILab #1665).
+RUN FLASH_ATTENTION_FORCE_BUILD=TRUE \
+    uv pip install --no-build-isolation "flash-attn>=2.7.0"
+
+# bitsandbytes from source against CUDA 12.8 (PyPI wheel lacks sm_120; bnb #1642).
+RUN git clone --depth 1 https://github.com/bitsandbytes-foundation/bitsandbytes /tmp/bnb \
+ && cd /tmp/bnb \
+ && cmake -DCOMPUTE_BACKEND=cuda -S . \
+ && make -j"$(nproc)" \
+ && uv pip install -e . \
+ && rm -rf /tmp/bnb/.git
+
+# Now copy the project source and install the package itself.
+COPY . .
+RUN uv sync --frozen --extra torch --extra train --extra eval --extra nlg --extra formal \
+ || uv sync --extra torch --extra train --extra eval --extra nlg --extra formal
+
+CMD ["uv", "run", "python", "scripts/00_verify_env.py"]
