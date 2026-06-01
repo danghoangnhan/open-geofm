@@ -85,21 +85,6 @@ Full ten-week phase plan + Blackwell pain-log: see the **[wiki](https://github.c
 
 ---
 
-## Repository layout
-
-```
-open-geofm/
-├── src/open_geofm/{formal,sampling,render,nlg,dataset,train,eval}/
-├── notebooks/        # numbered, ≤30 min each, pedagogical
-├── scripts/          # 00_verify_env, 02_generate_dataset, 03_train, 04_eval
-├── docker/           # Dockerfile.blackwell + compose
-├── wiki/             # docs (synced to GitHub Wiki)
-├── tests/            # pytest, CPU-only, runs in CI
-└── pyproject.toml    # uv-managed
-```
-
----
-
 ## Citation
 
 If you use this implementation, please cite **both** the original GeoFM paper and this repository.
@@ -131,12 +116,3 @@ A Zenodo DOI is auto-minted on each tagged release via `CITATION.cff`.
 * **HuggingFace TRL + PEFT** — `SFTTrainer` and LoRA.
 * **VLMEvalKit** (OpenCompass) — multimodal evaluation harness.
 * **MAVIS / DFE-GPS / G-LLaVA / GeoX** — prior art that informed the design.
-
----
-
-## License
-
-* Code: **Apache-2.0** (see [LICENSE](LICENSE)).
-* Synthetic dataset releases on the Hugging Face Hub: **CC-BY-4.0**. Note that
-  seed problems originate from FormalGeo7K which has its own license — we do not
-  redistribute seed CDLs verbatim.
