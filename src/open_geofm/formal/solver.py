@@ -1,42 +1,163 @@
-"""Wraps BitSecret/FGPS for forward/backward symbolic search.
+"""FGPS symbolic solver: the `FGPSSolver` class + a backward-compatible `solve`.
 
-Blueprint §2 Phase 1 + Phase 3. CPU-only. 15s timeout per call (FGPS auto_run hangs
-on some seeds).
+Wraps BitSecret/FGPS forward/backward search. `formalgeo` is imported eagerly at
+module top — this module is a concrete backend (reached via the registry / the
+`formal` extra), never part of the base CPU import graph.
 
-Backed by `formalgeo.solver.{forward_search,backward_search}` from the
-`formalgeo` PyPI package. The dataset's predicate / theorem GDLs are reused
-across calls via an `lru_cache`-d searcher factory.
+`FGPSSolver` is the clean `Solver` implementation; `solve()` / `_searcher()` /
+`_problem_cdl()` remain as thin functional shims for existing callers and tests.
 """
 
 from __future__ import annotations
 
 import logging
-import os
-from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+import formalgeo.parse.inverse_parse_m2f as _m2f  # type: ignore[import-not-found]
+from formalgeo.data.data import DatasetLoader  # type: ignore[import-not-found]
+from formalgeo.solver.backward_search import BackwardSearcher  # type: ignore[import-not-found]
+from formalgeo.solver.forward_search import ForwardSearcher  # type: ignore[import-not-found]
 from func_timeout import FunctionTimedOut, func_timeout
 
-from .cdl import Problem
+from ..config import (
+    DEFAULT_BEAM_SIZE,
+    DEFAULT_DATASET_NAME,
+    DEFAULT_FGPS_SEARCH_STRATEGY,
+    DEFAULT_MAX_DEPTH,
+    DEFAULT_SEARCHER_CACHE_SIZE,
+    DEFAULT_SOLVE_STRATEGY,
+    DEFAULT_SOLVE_TIMEOUT_S,
+    FGPSConfig,
+)
+from .base import SolverResult
+from .cdl import Problem, to_equal_form
 from .loader import _resolve_root
 
 log = logging.getLogger(__name__)
 
-
-@dataclass(frozen=True, slots=True)
-class SolverResult:
-    """Outcome of a single solver call."""
-
-    solved: bool
-    answer: str | None
-    theorem_seqs: tuple[str, ...]
-    timed_out: bool = False
-    error: str | None = None
+__all__ = ["FGPSSolver", "SolverResult", "solve"]
 
 
-@lru_cache(maxsize=4)
+def build_searcher(
+    *,
+    predicate_gdl,
+    theorem_gdl,
+    strategy: str,
+    search_strategy: str,
+    max_depth: int,
+    beam_size: int,
+    theorem_usage_stats: dict,
+):
+    """Construct an FGPS searcher, forwarding ALL hyperparameters (the previous
+    `_searcher` ignored max_depth/beam_size and hardcoded 15/20)."""
+    cls = BackwardSearcher if strategy == "backward" else ForwardSearcher
+    return cls(
+        predicate_GDL=predicate_gdl,
+        theorem_GDL=theorem_gdl,
+        strategy=search_strategy,
+        max_depth=max_depth,
+        beam_size=beam_size,
+        t_info=theorem_usage_stats,
+    )
+
+
+def _run_search(searcher, problem_cdl: dict) -> tuple[bool, list]:
+    """init_search + search as one func_timeout target."""
+    searcher.init_search(problem_cdl)
+    return searcher.search()
+
+
+def _extract_answer(searcher) -> str | None:
+    """Pull the verified answer off a solved FGPS searcher."""
+    fg_goal = getattr(searcher.problem, "goal", None)
+    if fg_goal is None:
+        return None
+    # solved_answer holds numbers for algebra/equal goals; .answer holds the
+    # logical-goal payload (tuple of point labels) for non-algebra goals.
+    if fg_goal.solved_answer is not None:
+        return str(fg_goal.solved_answer)
+    if fg_goal.answer is not None:
+        return str(fg_goal.answer)
+    return None
+
+
+def _derived_metrics(searcher) -> tuple[str, ...]:
+    """Best-effort: snapshot the conditions FGPS proved into canonical
+    `Equal(...)` CDL strings, so the Algorithm 1 fallback has a structured source
+    (the paper's 'last valid inference'). Returns () if the snapshot fails."""
+    try:
+        snapshot = _m2f.inverse_parse_logic_to_cdl(searcher.problem)
+    except Exception:
+        return ()
+    seen: set[str] = set()
+    out: list[str] = []
+    for step in sorted(snapshot):
+        for cdl in snapshot[step]:
+            canon = to_equal_form(cdl)
+            if canon not in seen:
+                seen.add(canon)
+                out.append(canon)
+    return tuple(out)
+
+
+class FGPSSolver:
+    """Concrete `Solver` over FGPS. Hyperparameters come from `FGPSConfig`; the
+    searcher is built once and reused across `solve()` calls."""
+
+    def __init__(
+        self,
+        config: FGPSConfig | None = None,
+        *,
+        root: Path | str | None = None,
+        dataset_name: str | None = None,
+    ) -> None:
+        self.config = config or FGPSConfig()
+        self.root = _resolve_root(root)
+        self.dataset_name = dataset_name or DEFAULT_DATASET_NAME
+        loader = DatasetLoader(self.dataset_name, str(self.root))
+        self._searcher = build_searcher(
+            predicate_gdl=loader.predicate_GDL,
+            theorem_gdl=loader.theorem_GDL,
+            strategy=self.config.strategy,
+            search_strategy=self.config.search_strategy,
+            max_depth=self.config.max_depth,
+            beam_size=self.config.beam_size,
+            theorem_usage_stats=self.config.theorem_usage_stats,
+        )
+
+    def solve(self, problem: Problem, candidate_answer: str | None = None) -> SolverResult:
+        problem_cdl = problem.to_fgps_cdl(
+            candidate_answer,
+            unused_goal_cdl=self.config.unused_goal_cdl,
+            stub_answer=self.config.stub_answer,
+        )
+        try:
+            solved, seqs = func_timeout(
+                self.config.timeout_s, _run_search, args=(self._searcher, problem_cdl)
+            )
+        except FunctionTimedOut:
+            return SolverResult(False, None, (), timed_out=True)
+        except Exception as e:
+            log.warning("FGPS solve failed for pid=%s: %s", problem.pid, e)
+            return SolverResult(False, None, (), error=str(e))
+        if not solved:
+            return SolverResult(False, None, ())
+        return SolverResult(
+            solved=True,
+            answer=_extract_answer(self._searcher),
+            theorem_seqs=tuple(str(s) for s in (seqs or ())),
+            derived_metrics=_derived_metrics(self._searcher),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible functional shims.
+# ---------------------------------------------------------------------------
+
+
+@lru_cache(maxsize=DEFAULT_SEARCHER_CACHE_SIZE)
 def _searcher(
     datasets_root: str,
     dataset_name: str,
@@ -44,113 +165,52 @@ def _searcher(
     max_depth: int,
     beam_size: int,
 ):
-    """Cached searcher per (dataset, strategy). Each call to `init_search` resets
-    its internal state, so a single instance is safe to reuse across problems."""
-    from formalgeo.data.data import DatasetLoader  # type: ignore[import-not-found]
-    from formalgeo.solver.backward_search import (  # type: ignore[import-not-found]
-        BackwardSearcher,
-    )
-    from formalgeo.solver.forward_search import (  # type: ignore[import-not-found]
-        ForwardSearcher,
-    )
-
+    """Cached searcher per (dataset, strategy, depth, beam). FIX: forwards
+    max_depth/beam_size to the constructor (previously hardcoded 15/20)."""
     loader = DatasetLoader(dataset_name, datasets_root)
-    cls = BackwardSearcher if strategy == "backward" else ForwardSearcher
-    # `t_info={}` keeps every theorem in the search space (no pruning); FGPS
-    # ships per-theorem usage stats but they're an optimisation, not required.
-    return cls(
-        predicate_GDL=loader.predicate_GDL,
-        theorem_GDL=loader.theorem_GDL,
-        strategy="bfs",
-        max_depth=15,
-        beam_size=20,
-        t_info={},
+    return build_searcher(
+        predicate_gdl=loader.predicate_GDL,
+        theorem_gdl=loader.theorem_GDL,
+        strategy=strategy,
+        search_strategy=DEFAULT_FGPS_SEARCH_STRATEGY,
+        max_depth=max_depth,
+        beam_size=beam_size,
+        theorem_usage_stats={},
     )
 
 
 def _problem_cdl(problem: Problem, candidate_answer: str | None) -> dict:
-    """`Problem` -> the dict shape that FGPS's `parse_problem_cdl` expects.
-
-    FGPS is an *answer-verifier*: it proves that `goal.item == problem_answer`.
-    For seed problems (Phase 1) the answer comes from the dataset; for
-    synthesised problems (Phase 2 Algorithm 1) the driver derives a candidate
-    answer from `gather_metric_info`'s BFS and passes it in.
-    """
-    answer = candidate_answer if candidate_answer is not None else problem.answer
-    if answer is None:
-        raise ValueError(
-            "FGPS requires a candidate answer to verify; pass `candidate_answer=...` "
-            "or set `Problem.answer`."
-        )
-    return {
-        "problem_id": problem.pid,
-        "construction_cdl": list(problem.construction_cdl),
-        "text_cdl": list(problem.text_cdl),
-        "image_cdl": list(problem.image_cdl),
-        "goal_cdl": problem.goal_cdl,
-        "problem_answer": str(answer),
-    }
-
-
-def _run_search(searcher, problem_cdl: dict) -> tuple[bool, list]:
-    """Wrap searcher.init_search + .search into a single call so func_timeout
-    only needs one target."""
-    searcher.init_search(problem_cdl)
-    return searcher.search()
+    """`Problem` -> FGPS dict (requires an answer to verify)."""
+    return problem.to_fgps_cdl(candidate_answer, require_answer=True)
 
 
 def solve(
     problem: Problem,
-    strategy: Literal["forward", "backward"] = "backward",
-    timeout_s: float = 15.0,
+    strategy: Literal["forward", "backward"] = DEFAULT_SOLVE_STRATEGY,
+    timeout_s: float = DEFAULT_SOLVE_TIMEOUT_S,
     *,
     candidate_answer: str | None = None,
     root: Path | str | None = None,
-    dataset_name: str = "formalgeo7k_v2",
-    max_depth: int = 15,
-    beam_size: int = 20,
+    dataset_name: str = DEFAULT_DATASET_NAME,
+    max_depth: int = DEFAULT_MAX_DEPTH,
+    beam_size: int = DEFAULT_BEAM_SIZE,
 ) -> SolverResult:
-    """Run FGPS on `problem` and return the verified answer + proof trace.
-
-    FGPS is an answer-verifier; pass `candidate_answer` for synthesised problems
-    (Algorithm 1 derives this from `gather_metric_info`). For seed problems the
-    answer is read from `problem.answer`.
-
-    Times out at `timeout_s` (FGPS occasionally hangs on pathological seeds).
-    Errors are caught and surfaced as `SolverResult(solved=False, error=...)`
-    so the Phase 2 driver can keep going.
-    """
+    """Functional shim: run FGPS on `problem` and return the verified answer."""
     root_path = _resolve_root(root)
     searcher = _searcher(str(root_path), dataset_name, strategy, max_depth, beam_size)
     problem_cdl = _problem_cdl(problem, candidate_answer)
-
     try:
         solved, seqs = func_timeout(timeout_s, _run_search, args=(searcher, problem_cdl))
     except FunctionTimedOut:
-        return SolverResult(solved=False, answer=None, theorem_seqs=(), timed_out=True)
+        return SolverResult(False, None, (), timed_out=True)
     except Exception as e:
         log.warning("FGPS solve failed for pid=%s: %s", problem.pid, e)
-        return SolverResult(solved=False, answer=None, theorem_seqs=(), error=str(e))
-
+        return SolverResult(False, None, (), error=str(e))
     if not solved:
-        return SolverResult(solved=False, answer=None, theorem_seqs=())
-
-    answer = None
-    fg_goal = getattr(searcher.problem, "goal", None)
-    if fg_goal is not None:
-        # solved_answer holds numbers for algebra/equal goals; .answer holds the
-        # logical-goal payload (tuple of point labels) for non-algebra goals.
-        if fg_goal.solved_answer is not None:
-            answer = str(fg_goal.solved_answer)
-        elif fg_goal.answer is not None:
-            answer = str(fg_goal.answer)
+        return SolverResult(False, None, ())
     return SolverResult(
         solved=True,
-        answer=answer,
+        answer=_extract_answer(searcher),
         theorem_seqs=tuple(str(s) for s in (seqs or ())),
+        derived_metrics=_derived_metrics(searcher),
     )
-
-
-# Silence the noisy "DEBUG" prints FGPS emits to stdout when its `debug` flag
-# isn't suppressed at the env level.
-os.environ.setdefault("FORMALGEO_VERBOSE", "0")

@@ -1,68 +1,63 @@
-"""Build an HF `datasets.Dataset` from rendered synthetic samples.
+"""Build an HF dataset from rendered synthetic samples (+ a JSONL sidecar).
 
-Blueprint §2 Phase 6. Features (CDLs bundled alongside NL — the educational
-killer feature):
+Blueprint §2 Phase 6. The sample id is computed in ONE place (`make_sample_id`)
+and used by BOTH the renderer (PNG filename) and this builder (record image
+path), so they always agree — fixing the renderer/builder id mismatch that left
+every record's `image` pointing at a non-existent file. The id is a stable,
+salt-free SHA-1 (not Python's `PYTHONHASHSEED`-salted `hash()`), so PNG names are
+reproducible across processes and runs.
 
-    {
-      "id": str,
-      "image": Image,
-      "problem": str,
-      "solution": str,
-      "answer": str,
-      "construction_cdl": list[str],
-      "image_cdl": list[str],
-      "text_cdl": list[str],
-      "goal_cdl": str,
-      "theorem_seq": list[str],
-      "source_seed_pid": int,
-    }
-
-Ships as three HF dataset repos: `open-geofm-mini-5k`, `-10k`, `-20k`. CC-BY-4.0.
-
-The `image_dir` argument resolves images by sample id (``f"{image_dir}/{id}.png"``).
-The builder doesn't render — Phase 4 renderers write images first, then the
-builder zips them with the verified text records.
+The heavy `datasets` dependency lives in `_hf_backend.py` (imported via importlib
+only when present); without it, the JSONL sidecar is the artifact.
 """
 
 from __future__ import annotations
 
+import hashlib
+import importlib
 import json
 from collections.abc import Iterable
 from pathlib import Path
 
+from ..config import DatasetConfig
 from ..sampling.algorithm1 import SyntheticSample
 
-
-def _dedup(seq):
-    """Preserve order, drop duplicates. FormalGeo7K seeds sometimes list the
-    same metric in both text_cdl and image_cdl; the Algorithm 1 swap propagates
-    that into `new_metrics`, and we dedupe before emitting the dataset record."""
-    seen: set = set()
-    out: list = []
-    for x in seq:
-        if x in seen:
-            continue
-        seen.add(x)
-        out.append(x)
-    return out
+_HF_BACKEND = "open_geofm.dataset._hf_backend"
 
 
-def _sample_to_record(sample: SyntheticSample, image_dir: Path, idx: int) -> dict:
-    sample_id = f"openfm-{sample.source_pid:05d}-{idx:04d}"
+def make_sample_id(sample: SyntheticSample, config: DatasetConfig | None = None) -> str:
+    """Deterministic, salt-free sample id shared by renderer + builder.
+
+    Derived from (source_pid, goal, added_metrics) — the tuple that uniquely
+    identifies an accepted swap — so the same sample always maps to the same id
+    regardless of process or run.
+    """
+    config = config or DatasetConfig()
+    digest = hashlib.sha1(
+        "|".join((str(sample.source_pid), sample.goal, *sample.added_metrics)).encode()
+    ).hexdigest()
+    return (
+        f"{config.id_prefix}-{sample.source_pid:0{config.pid_pad}d}-{digest[: config.idx_pad + 4]}"
+    )
+
+
+def _dedup(seq: Iterable[str]) -> list[str]:
+    """Preserve order, drop duplicates."""
+    return list(dict.fromkeys(seq))
+
+
+def _sample_to_record(sample: SyntheticSample, image_dir: Path, config: DatasetConfig) -> dict:
+    sample_id = make_sample_id(sample, config)
     added = set(sample.added_metrics)
-    image_cdl = _dedup(m for m in sample.new_metrics if m in added)
-    text_cdl = _dedup(m for m in sample.new_metrics if m not in added)
     return {
         "id": sample_id,
-        "image": str(image_dir / f"{sample_id}.png"),
+        "image": str(image_dir / f"{sample_id}{config.image_ext}"),
         "problem": sample.nl_problem or "",
         "solution": sample.nl_solution or "",
         "answer": sample.answer,
         "construction_cdl": _dedup(sample.construction_cdl),
-        # The driver split P_new into text+image; we keep both here so downstream
-        # filters can recover the split. `new_metrics` is the union, by design.
-        "image_cdl": image_cdl,
-        "text_cdl": text_cdl,
+        "image_cdl": _dedup(m for m in sample.new_metrics if m in added),
+        "text_cdl": _dedup(m for m in sample.new_metrics if m not in added),
         "goal_cdl": sample.goal,
         "theorem_seq": list(sample.theorem_seqs),
         "source_seed_pid": sample.source_pid,
@@ -75,59 +70,36 @@ def build(
     out_dir: Path,
     *,
     image_loader=None,
+    config: DatasetConfig | None = None,
 ):
-    """Materialize `samples` + rendered images at `image_dir` into an HF dataset
-    saved to `out_dir`.
+    """Materialize `samples` + rendered images into an HF dataset at `out_dir`.
 
-    Args:
-        samples: verified Algorithm 1 outputs.
-        image_dir: directory containing one PNG per sample (named by `id`).
-        out_dir: where `datasets.Dataset.save_to_disk` writes the result.
-        image_loader: optional ``str -> PIL.Image`` callback (defaults to PIL's
-            lazy loader via `datasets.Image()`); useful for unit tests with no
-            real PNGs on disk.
+    Always writes a JSONL sidecar. If `datasets` is installed, also builds and
+    saves a `datasets.Dataset`; otherwise the JSONL dict is the return value.
     """
+    config = config or DatasetConfig()
     image_dir = Path(image_dir)
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    records = [_sample_to_record(s, image_dir, i) for i, s in enumerate(samples)]
-    # Always write a JSONL sidecar — it's the introspectable copy for users
-    # without `datasets` installed (e.g. the host venv).
-    jsonl_path = out_dir / "records.jsonl"
+    records = [_sample_to_record(s, image_dir, config) for s in samples]
+    jsonl_path = out_dir / config.records_filename
     with jsonl_path.open("w") as f:
         for rec in records:
             f.write(json.dumps(rec) + "\n")
 
     try:
-        from datasets import (  # type: ignore[import-not-found]
-            Dataset,
-            Features,
-            Image,
-            Sequence,
-            Value,
-        )
+        backend = importlib.import_module(_HF_BACKEND)
     except ImportError:
-        # No `datasets` in the host venv → JSONL is the artifact.
         return {"records_jsonl": str(jsonl_path), "n_records": len(records)}
+    return backend.build_hf_dataset(records, out_dir, image_loader=image_loader)
 
-    features = Features(
-        {
-            "id": Value("string"),
-            "image": Image(),
-            "problem": Value("string"),
-            "solution": Value("string"),
-            "answer": Value("string"),
-            "construction_cdl": Sequence(Value("string")),
-            "image_cdl": Sequence(Value("string")),
-            "text_cdl": Sequence(Value("string")),
-            "goal_cdl": Value("string"),
-            "theorem_seq": Sequence(Value("string")),
-            "source_seed_pid": Value("int32"),
-        }
-    )
-    ds = Dataset.from_list(records, features=features)
-    if image_loader is not None:
-        ds = ds.map(lambda r: {"image": image_loader(r["image"])})
-    ds.save_to_disk(str(out_dir))
-    return ds
+
+class HFDatasetBuilder:
+    """Concrete `DatasetBuilder` (HF dataset + JSONL sidecar)."""
+
+    def __init__(self, config: DatasetConfig | None = None) -> None:
+        self.config = config or DatasetConfig()
+
+    def build(self, samples, image_dir, out_dir, *, image_loader=None):
+        return build(samples, image_dir, out_dir, image_loader=image_loader, config=self.config)

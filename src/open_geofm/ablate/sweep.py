@@ -18,6 +18,11 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+import matplotlib
+
+matplotlib.use("Agg")  # headless: required inside Docker + CI
+import matplotlib.pyplot as plt
+
 from ..eval.compare import BenchmarkScore
 
 # ---------------------------------------------------------------------------
@@ -179,11 +184,6 @@ def plot_sweep(
     `display(fig)`). The plot is deliberately minimal — readers regularly
     re-style the curves for the blog post.
     """
-    import matplotlib
-
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt
-
     fig, ax = plt.subplots(figsize=(6, 4), dpi=120)
     bases = sorted({p.base_config for p in points})
     for base in bases:
@@ -206,3 +206,16 @@ def plot_sweep(
         out_path.parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(out_path)
     return fig
+
+
+class SweepSlicer:
+    """OOP wrapper over the ablation-axis slicers (the `SweepSlicer` seam)."""
+
+    def scale(self, scores: list[BenchmarkScore], *, benchmark: str) -> list[SweepPoint]:
+        return scale_curve(scores, benchmark=benchmark)
+
+    def renderer(self, scores: list[BenchmarkScore], *, benchmark: str) -> list[SweepPoint]:
+        return renderer_split(scores, benchmark=benchmark)
+
+    def lora_rank(self, scores: list[BenchmarkScore], *, benchmark: str) -> list[SweepPoint]:
+        return lora_rank_curve(scores, benchmark=benchmark)
