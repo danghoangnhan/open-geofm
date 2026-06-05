@@ -1,10 +1,8 @@
-"""Load FormalGeo7K problems by PID.
+"""Load FormalGeo7K problems by PID: the `FormalGeo7KSource` class + functional
+shims (`load_problem` / `iter_problems`).
 
-Blueprint §2 Phase 1. Wraps the `formalgeo` PyPI package (BitSecret/formalgeo).
-CPU-only.
-
-Default data root: ``$OPEN_GEOFM_DATA / formalgeo7k_v2``. Run
-``scripts/01_download_formalgeo7k.sh`` once to populate it (~521 MB download).
+`formalgeo` is imported eagerly at module top — this is a concrete backend
+(reached via the registry / the `formal` extra), not part of the base graph.
 """
 
 from __future__ import annotations
@@ -14,74 +12,34 @@ from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
 
+from formalgeo.data.data import DatasetLoader  # type: ignore[import-not-found]
+
+from ..config import (
+    DEFAULT_DATA_DIRNAME,
+    DEFAULT_DATA_ENV_VAR,
+    DEFAULT_DATASET_NAME,
+    DEFAULT_LOADER_CACHE_SIZE,
+    DEFAULT_PROBLEM_COUNT_KEY,
+    FormalGeoConfig,
+)
 from .cdl import Problem
 
-_DEFAULT_DATASET = "formalgeo7k_v2"
+__all__ = ["FormalGeo7KSource", "iter_problems", "load_problem"]
 
 
 def _resolve_root(root: Path | str | None) -> Path:
-    """Resolve the FormalGeo7K root: explicit arg → env var → repo `data/` default."""
+    """Resolve the FormalGeo7K root: explicit arg → env var → repo `data/`."""
     if root is not None:
         return Path(root)
-    env = os.environ.get("OPEN_GEOFM_DATA")
+    env = os.environ.get(DEFAULT_DATA_ENV_VAR)
     if env:
         return Path(env)
-    return Path(__file__).resolve().parents[3] / "data"
-
-
-@lru_cache(maxsize=4)
-def _get_loader(datasets_root: str, dataset_name: str):
-    """Cached DatasetLoader instance. Lazy import keeps `formalgeo` out of the
-    base venv's import graph (it's a 'formal' extra)."""
-    from formalgeo.data.data import DatasetLoader  # type: ignore[import-not-found]
-
-    return DatasetLoader(dataset_name, datasets_root)
-
-
-def load_problem(
-    pid: int,
-    root: Path | str | None = None,
-    dataset_name: str = _DEFAULT_DATASET,
-) -> Problem:
-    """Load problem `pid` from the FormalGeo7K dataset.
-
-    Args:
-        pid: 1-indexed FormalGeo7K problem id (FormalGeo7K uses 1..7000).
-        root: directory that *contains* `<dataset_name>/`. Defaults to
-            `$OPEN_GEOFM_DATA` or the repo's `data/`.
-        dataset_name: `formalgeo7k_v2` (default) or `formalgeo7k_v1`.
-    """
-    root = _resolve_root(root)
-    raw = _get_loader(str(root), dataset_name).get_problem(pid)
-    return _problem_from_raw(raw)
-
-
-def iter_problems(
-    root: Path | str | None = None,
-    dataset_name: str = _DEFAULT_DATASET,
-) -> Iterator[Problem]:
-    """Yield every FormalGeo7K `Problem` in PID order."""
-    root = _resolve_root(root)
-    loader = _get_loader(str(root), dataset_name)
-    n = loader.info["problem_number"]
-    for pid in range(1, n + 1):
-        yield _problem_from_raw(loader.get_problem(pid))
+    # loader.py lives at src/open_geofm/formal/loader.py → repo root is parents[3].
+    return Path(__file__).resolve().parents[3] / DEFAULT_DATA_DIRNAME
 
 
 def _problem_from_raw(raw: dict) -> Problem:
-    """Convert a FormalGeo7K problem JSON into our `Problem` dataclass.
-
-    The JSON schema (FormalGeo7K v2) is::
-
-        {"problem_id": int,
-         "construction_cdl": list[str],
-         "text_cdl": list[str],
-         "image_cdl": list[str],
-         "goal_cdl": str,
-         "problem_answer": str,
-         "theorem_seqs": list[str],
-         ...}
-    """
+    """Convert a FormalGeo7K problem JSON into our `Problem` dataclass."""
     return Problem(
         pid=int(raw["problem_id"]),
         construction_cdl=tuple(raw.get("construction_cdl") or ()),
@@ -91,3 +49,60 @@ def _problem_from_raw(raw: dict) -> Problem:
         theorem_seqs=tuple(raw.get("theorem_seqs") or ()),
         answer=raw.get("problem_answer"),
     )
+
+
+@lru_cache(maxsize=DEFAULT_LOADER_CACHE_SIZE)
+def _get_loader(datasets_root: str, dataset_name: str) -> DatasetLoader:
+    """Cached DatasetLoader per (root, dataset)."""
+    return DatasetLoader(dataset_name, datasets_root)
+
+
+def load_problem(
+    pid: int,
+    root: Path | str | None = None,
+    dataset_name: str = DEFAULT_DATASET_NAME,
+) -> Problem:
+    """Load problem `pid` from the FormalGeo7K dataset."""
+    root = _resolve_root(root)
+    raw = _get_loader(str(root), dataset_name).get_problem(pid)
+    return _problem_from_raw(raw)
+
+
+def iter_problems(
+    root: Path | str | None = None,
+    dataset_name: str = DEFAULT_DATASET_NAME,
+) -> Iterator[Problem]:
+    """Yield every FormalGeo7K `Problem` in PID order."""
+    root = _resolve_root(root)
+    loader = _get_loader(str(root), dataset_name)
+    n = loader.info[DEFAULT_PROBLEM_COUNT_KEY]
+    for pid in range(1, n + 1):
+        yield _problem_from_raw(loader.get_problem(pid))
+
+
+class FormalGeo7KSource:
+    """Concrete `ProblemSource` over the FormalGeo7K corpus. Holds one
+    DatasetLoader as instance state (replacing the lru_cache-on-string hack)."""
+
+    def __init__(
+        self,
+        config: FormalGeoConfig | None = None,
+        *,
+        root: Path | str | None = None,
+        dataset_name: str | None = None,
+    ) -> None:
+        self.config = config or FormalGeoConfig()
+        self.root = _resolve_root(root)
+        self.dataset_name = dataset_name or self.config.dataset_name
+        self._loader = DatasetLoader(self.dataset_name, str(self.root))
+
+    def load(self, pid: int) -> Problem:
+        return _problem_from_raw(self._loader.get_problem(pid))
+
+    @property
+    def problem_count(self) -> int:
+        return int(self._loader.info[self.config.problem_count_key])
+
+    def iter_problems(self) -> Iterator[Problem]:
+        for pid in range(self.config.first_pid, self.problem_count + 1):
+            yield self.load(pid)

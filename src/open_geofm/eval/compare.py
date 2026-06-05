@@ -59,18 +59,11 @@ class BenchmarkScore:
     source: Path | None = None
 
 
-def parse_score_json(path: Path) -> tuple[float | None, str, dict[str, float]]:
-    """Parse a VLMEvalKit ``*_score.json`` payload.
-
-    Returns ``(score, metric_name, extras)``. ``score`` is None when no
-    recognised metric is present; callers can still surface the path so the
-    user can inspect the raw JSON.
-    """
-    data = json.loads(path.read_text())
-
+def _parse_score_data(data: Any) -> tuple[float | None, str, dict[str, float]]:
+    """Core of `parse_score_json`, operating on already-parsed JSON so callers
+    that already have the dict (e.g. `scan_work_dir`) don't re-read the file."""
     if isinstance(data, int | float):
         return float(data), "value", {}
-
     if not isinstance(data, dict):
         return None, "unknown", {}
 
@@ -78,25 +71,30 @@ def parse_score_json(path: Path) -> tuple[float | None, str, dict[str, float]]:
     for key in _PREFERRED_METRIC_KEYS:
         if key in data and isinstance(data[key], int | float):
             extras = {
-                k: float(v)
-                for k, v in data.items()
-                if k != key and isinstance(v, int | float)
+                k: float(v) for k, v in data.items() if k != key and isinstance(v, int | float)
             }
             return float(data[key]), key, extras
 
-    # Two-level: average across numeric leaves.
+    # Two-level: average ONLY the nested-dict leaves. Top-level scalars are
+    # metadata (sample counts, seeds) and must not pollute the headline mean
+    # (bug #24: the old code pooled both levels).
     leaves: list[float] = []
     for v in data.values():
-        if isinstance(v, int | float):
-            leaves.append(float(v))
-        elif isinstance(v, dict):
-            for w in v.values():
-                if isinstance(w, int | float):
-                    leaves.append(float(w))
+        if isinstance(v, dict):
+            leaves.extend(float(w) for w in v.values() if isinstance(w, int | float))
     if leaves:
         return sum(leaves) / len(leaves), "mean(leaves)", {}
 
     return None, "unknown", {}
+
+
+def parse_score_json(path: Path) -> tuple[float | None, str, dict[str, float]]:
+    """Parse a VLMEvalKit ``*_score.json`` payload -> ``(score, metric, extras)``.
+
+    ``score`` is None when no recognised metric is present; callers can still
+    surface the path so the user can inspect the raw JSON.
+    """
+    return _parse_score_data(json.loads(path.read_text()))
 
 
 def _model_and_benchmark(path: Path, root: Path) -> tuple[str, str]:
@@ -131,16 +129,13 @@ def scan_work_dir(work_dir: Path) -> list[BenchmarkScore]:
     work_dir = Path(work_dir)
     out: list[BenchmarkScore] = []
     for path in sorted(work_dir.rglob("*_score.json")):
-        score, metric, extras = parse_score_json(path)
+        # Read + parse exactly once (bug #25: the warning branch used to re-read).
+        data = json.loads(path.read_text())
+        score, metric, extras = _parse_score_data(data)
         model, benchmark = _model_and_benchmark(path, work_dir)
         if score is None:
-            log.warning(
-                "%s: no recognised metric (keys=%s); leaving score=None",
-                path,
-                list(json.loads(path.read_text()).keys())
-                if path.exists()
-                else "<missing>",
-            )
+            keys = list(data.keys()) if isinstance(data, dict) else data
+            log.warning("%s: no recognised metric (keys=%s); leaving score=None", path, keys)
         out.append(
             BenchmarkScore(
                 model=model,
@@ -194,9 +189,7 @@ def to_delta_table(scores: list[BenchmarkScore], baseline_model: str) -> str:
         return "_(no results)_"
     models = sorted({s.model for s in scores})
     if baseline_model not in models:
-        raise ValueError(
-            f"baseline {baseline_model!r} not found; available: {sorted(models)}"
-        )
+        raise ValueError(f"baseline {baseline_model!r} not found; available: {sorted(models)}")
     benchmarks = sorted({s.benchmark for s in scores})
     by_key = {(s.model, s.benchmark): s for s in scores}
 
@@ -236,9 +229,7 @@ def to_delta_table(scores: list[BenchmarkScore], baseline_model: str) -> str:
 @app.command()
 def compare(
     work_dir: Path = typer.Argument(..., help="VLMEvalKit work-dir root."),
-    baseline: str | None = typer.Option(
-        None, help="Model name to use as the baseline (Δ table)."
-    ),
+    baseline: str | None = typer.Option(None, help="Model name to use as the baseline (Δ table)."),
     out: Path | None = typer.Option(None, help="Write table here; stdout if omitted."),
 ) -> None:
     """Scan a VLMEvalKit work-dir and emit a Markdown comparison table."""

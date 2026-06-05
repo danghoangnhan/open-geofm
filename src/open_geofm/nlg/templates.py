@@ -1,17 +1,11 @@
 """Predicate-to-NL templates for each FormalGeo predicate.
 
-Blueprint §2 Phase 5 (Step 1 of the two-step NLG):
-    "for each formal language expression in FormalGeo, we use GPT-4o to generate
-     20 corresponding natural language templates, which are then manually
-     reviewed and corrected."
+Blueprint §2 Phase 5 (Step 1 of the two-step NLG): a draft is stitched from
+predicate templates, then (optionally) smoothed by an LLM. For each predicate we
+keep a few English variants; the rewriter picks one and smooths it.
 
-For each predicate we keep 3-6 English variants; the rewriter (Step 2) picks
-one and smooths it into natural prose. The seed set below covers the predicates
-used by the conftest toy + the most common ~20 FormalGeo predicates so the
-draft step is meaningful for the headline phase-6 dataset. Extend as new
-predicates appear in M_all during Phase 2 BFS.
-
-Template slot names match the order points appear in the CDL arg list.
+Slot names match the order points appear in the CDL arg list (`{a}`, `{b}`, …);
+`{points}` is the full point list for variadic predicates; `{value}` is the RHS.
 """
 
 from __future__ import annotations
@@ -19,17 +13,15 @@ from __future__ import annotations
 import random
 import re
 
+# Predicates whose args are two 2-letter line tokens (e.g. `Parallel(AB,CD)`),
+# which must be split into four single points to fill the {a}{b}∥{c}{d} slots.
+_LINE_PAIR_PREDICATES = frozenset({"Parallel", "ParallelBetweenLine", "PerpendicularBetweenLine"})
+# Predicates rendered with the full {points} list rather than fixed slots.
+_VARIADIC_PREDICATES = frozenset({"Polygon", "Shape", "Collinear", "Cocircular"})
+
 TEMPLATES: dict[str, list[str]] = {
-    "Point": [
-        "Point {a} is given.",
-        "Let {a} be a point.",
-        "There is a point {a}.",
-    ],
-    "Line": [
-        "Line {a}{b} is drawn.",
-        "{a}{b} is a line segment.",
-        "Segment {a}{b} is given.",
-    ],
+    "Point": ["Point {a} is given.", "Let {a} be a point.", "There is a point {a}."],
+    "Line": ["Line {a}{b} is drawn.", "{a}{b} is a line segment.", "Segment {a}{b} is given."],
     "Triangle": [
         "Triangle {a}{b}{c} is given.",
         "Consider triangle {a}{b}{c}.",
@@ -40,23 +32,19 @@ TEMPLATES: dict[str, list[str]] = {
         "Consider quadrilateral {a}{b}{c}{d}.",
         "{a}{b}{c}{d} is a four-sided figure.",
     ],
-    "Polygon": [
-        "Polygon {a} is given.",
-        "Consider polygon {a}.",
-    ],
+    "Polygon": ["Polygon {points} is given.", "Consider polygon {points}."],
+    "Shape": ["Shape {points} is given.", "Consider the figure {points}."],
     "Collinear": [
-        "Points {a}, {b}, and {c} are collinear.",
-        "{a}, {b}, {c} lie on a common line.",
+        "Points {points} are collinear.",
+        "{points} lie on a common line.",
     ],
+    "Cocircular": ["Points {points} are concyclic.", "{points} lie on a common circle."],
     "Parallel": [
         "Line {a}{b} is parallel to line {c}{d}.",
         "{a}{b} ∥ {c}{d}.",
         "Segments {a}{b} and {c}{d} are parallel.",
     ],
-    "ParallelBetweenLine": [
-        "Line {a}{b} is parallel to line {c}{d}.",
-        "{a}{b} ∥ {c}{d}.",
-    ],
+    "ParallelBetweenLine": ["Line {a}{b} is parallel to line {c}{d}.", "{a}{b} ∥ {c}{d}."],
     "PerpendicularBetweenLine": [
         "Line {a}{b} is perpendicular to line {c}{d}.",
         "{a}{b} ⊥ {c}{d}.",
@@ -72,17 +60,10 @@ TEMPLATES: dict[str, list[str]] = {
         "∠{a}{b}{c} = {value}°.",
         "Angle {a}{b}{c} measures {value} degrees.",
     ],
-    "AreaOfTriangle": [
-        "The area of triangle {a}{b}{c} is {value}.",
-        "[△{a}{b}{c}] = {value}.",
-    ],
-    "Equal": [
-        "{a} equals {b}.",
-        "{a} = {b}.",
-    ],
+    "AreaOfTriangle": ["The area of triangle {a}{b}{c} is {value}.", "[△{a}{b}{c}] = {value}."],
+    "Equal": ["{a} equals {b}.", "{a} = {b}."],
 }
 
-# Goal templates: the goal is a *question*, not a statement.
 GOAL_TEMPLATES: dict[str, list[str]] = {
     "LengthOfLine": [
         "Find the length of {a}{b}.",
@@ -93,14 +74,12 @@ GOAL_TEMPLATES: dict[str, list[str]] = {
         "Find the measure of ∠{a}{b}{c}.",
         "What is the size of angle {a}{b}{c}?",
     ],
-    "AreaOfTriangle": [
-        "Find the area of triangle {a}{b}{c}.",
-        "What is the area of △{a}{b}{c}?",
-    ],
+    "AreaOfTriangle": ["Find the area of triangle {a}{b}{c}.", "What is the area of △{a}{b}{c}?"],
 }
 
 _SLOT_NAMES = ("a", "b", "c", "d", "e", "f")
 _STMT_RE = re.compile(r"\b([A-Z][A-Za-z]*)\(([^)]*)\)\s*(?:=\s*([-\d.]+|[^)]+?))?\s*$")
+_BRACE_RE = re.compile(r"\{[a-z]+\}")
 
 
 def _parse_statement(stmt: str) -> tuple[str, tuple[str, ...], str | None] | None:
@@ -110,31 +89,44 @@ def _parse_statement(stmt: str) -> tuple[str, tuple[str, ...], str | None] | Non
         return None
     pred = m.group(1)
     raw_args = [t.strip() for t in m.group(2).split(",") if t.strip()]
-    # `LengthOfLine(AB)` packs both points into one token — split it.
+    # Packed single-token forms: `LengthOfLine(AB)`, `MeasureOfAngle(ABC)`.
     if pred in {"LengthOfLine", "Line"} and len(raw_args) == 1 and len(raw_args[0]) == 2:
         raw_args = list(raw_args[0])
-    if pred == "MeasureOfAngle" and len(raw_args) == 1 and len(raw_args[0]) == 3:
+    elif pred == "MeasureOfAngle" and len(raw_args) == 1 and len(raw_args[0]) == 3:
         raw_args = list(raw_args[0])
+    elif pred in _LINE_PAIR_PREDICATES:
+        # `Parallel(AB,CD)` -> ('A','B','C','D') so the four point slots fill
+        # (fix for the brace-leak on line-pair predicates, bug #12).
+        split: list[str] = []
+        for t in raw_args:
+            if len(t) == 2 and t.isalpha():
+                split.extend(t)
+            else:
+                split.append(t)
+        raw_args = split
     return pred, tuple(raw_args), m.group(3)
 
 
-def _fill(template: str, args: tuple[str, ...], value: str | None) -> str:
-    slots = {name: arg for name, arg in zip(_SLOT_NAMES, args, strict=False)}
+def _fill(template: str, args: tuple[str, ...], value: str | None) -> str | None:
+    """Fill a template; return None if any slot is left unfilled (so the caller
+    can fall back to the raw statement instead of leaking literal braces)."""
+    slots: dict[str, str] = {name: arg for name, arg in zip(_SLOT_NAMES, args, strict=False)}
+    slots["points"] = ", ".join(args)  # variadic predicates (fix bug #13)
     if value is not None:
         slots["value"] = value
     try:
-        return template.format(**slots)
-    except KeyError:
-        # Missing slot → return template unchanged so the downstream rewriter can
-        # still smooth it (and so we don't silently drop the statement).
-        return template
+        filled = template.format(**slots)
+    except (KeyError, IndexError):
+        return None
+    return None if _BRACE_RE.search(filled) else filled
 
 
 def draft_nl(metric_conditions: tuple[str, ...], goal: str, *, seed: int | None = None) -> str:
-    """Stitch a draft NL problem statement from the conditions + goal using TEMPLATES.
+    """Stitch a draft NL problem statement from the conditions + goal.
 
-    Unknown predicates are passed through verbatim (the rewriter can clean them
-    up). Output: one sentence per condition, then the goal sentence.
+    Unknown predicates (and any whose template can't be fully filled) pass
+    through verbatim so the downstream rewriter can clean them up — but a literal
+    `{slot}` never reaches the output.
     """
     rng = random.Random(seed)
     out: list[str] = []
@@ -145,10 +137,8 @@ def draft_nl(metric_conditions: tuple[str, ...], goal: str, *, seed: int | None 
             continue
         pred, args, value = parsed
         choices = TEMPLATES.get(pred)
-        if not choices:
-            out.append(stmt)
-            continue
-        out.append(_fill(rng.choice(choices), args, value))
+        filled = _fill(rng.choice(choices), args, value) if choices else None
+        out.append(filled if filled is not None else stmt)
 
     parsed_goal = _parse_statement(goal)
     if parsed_goal is None:
@@ -156,8 +146,6 @@ def draft_nl(metric_conditions: tuple[str, ...], goal: str, *, seed: int | None 
     else:
         pred, args, _ = parsed_goal
         choices = GOAL_TEMPLATES.get(pred)
-        if choices:
-            out.append(_fill(rng.choice(choices), args, None))
-        else:
-            out.append(f"Find {goal}.")
+        filled = _fill(rng.choice(choices), args, None) if choices else None
+        out.append(filled if filled is not None else f"Find {goal}.")
     return " ".join(out)

@@ -5,109 +5,37 @@
 [![Paper: arXiv:2510.27448](https://img.shields.io/badge/arXiv-2510.27448-b31b1b.svg)](https://arxiv.org/abs/2510.27448)
 
 > **Educational reproduction — not the official code.**
-> This repository is a single-GPU, LoRA-only re-implementation of the **data-generation methodology** described in *GeoFM* (Zhang et al., 2025, Tencent Hunyuan, arXiv:2510.27448). It is **not affiliated with the authors**, the original paper has no public code release, and we fine-tune **Qwen2-VL-2B/7B + Qwen2.5-VL-7B with LoRA** on a reduced **10–20K** dataset rather than the paper's 80K full-parameter SFT of LLaVA-NeXT-8B / InternVL2-8B-MPO on an H20 96 GB GPU. The goal is **pedagogical clarity**, not state-of-the-art performance.
+> A single-GPU, LoRA-only re-implementation of the data-generation methodology of *GeoFM*. Not affiliated with the authors; the original paper has no public code release.
 
 ---
 
-## What this IS / IS NOT
+## Abstract
 
-| | open-geofm | original GeoFM |
-|---|---|---|
-| Base MLLM | Qwen2-VL-2B/7B, Qwen2.5-VL-7B | LLaVA-NeXT-8B, InternVL2-8B-MPO |
-| Fine-tune method | LoRA (r=16, all-linear) | full-parameter SFT |
-| Data scale | 5K / 10K / 20K | 80K |
-| Compute | single RTX 5090 (32 GB) | NVIDIA H20 96 GB |
-| Diagram renderer | matplotlib + GMBL-style re-impl | custom GMBL engine + mapping table |
-| Realistic eval target | **+8–15 pp** over base on MathVista-GPS / GeoQA | +18.7 pp over GPT-4o on MathVista-GPS |
+> *From the original paper — [**GeoFM: Enhancing Geometric Reasoning of MLLMs via Synthetic Data Generation through Formal Language**](https://arxiv.org/abs/2510.27448) (Zhang, Hu, Yu, Liu, and Liu, 2025, arXiv:2510.27448):*
+
+> Multi-modal Large Language Models (MLLMs) have gained significant attention in both academia and industry for their capabilities in handling multi-modal tasks. However, these models face challenges in mathematical geometric reasoning due to the scarcity of high-quality geometric data. To address this issue, synthetic geometric data has become an essential strategy. Current methods for generating synthetic geometric data involve rephrasing or expanding existing problems and utilizing predefined rules and templates to create geometric images and problems. However, these approaches often produce data that lacks diversity or is prone to noise. Additionally, the geometric images synthesized by existing methods tend to exhibit limited variation and deviate significantly from authentic geometric diagrams. To overcome these limitations, we propose GeoFM, a novel method for synthesizing geometric data. GeoFM uses formal languages to explore combinations of conditions within metric space, generating high-fidelity geometric problems that differ from the originals while ensuring correctness through a symbolic engine. Experimental results show that our synthetic data significantly outperforms existing methods. The model trained with our data surpass the proprietary GPT-4o model by 18.7% on geometry problem-solving tasks in MathVista and by 16.5% on GeoQA. Additionally, it exceeds the performance of a leading open-source model by 5.7% on MathVista and by 2.7% on GeoQA.
 
 ---
 
-## Pipeline
+## Documentation
 
-![open-geofm pipeline diagram](wiki/img/pipeline.svg)
+Full project documentation lives in the **[wiki](https://github.com/danghoangnhan/open-geofm/wiki)** (mirrored in [`wiki/`](wiki/)):
 
-(Same flow, as Mermaid:)
-
-```mermaid
-flowchart LR
-  A[FormalGeo7K seed] --> B[Algorithm 1<br/>metric swap]
-  B --> C[FGPS symbolic<br/>solver]
-  C --> D[Renderer<br/>matplotlib / GMBL]
-  C --> E[NL templates<br/>+ LLM rewriter]
-  E --> F[Answer verify<br/>vs FGPS]
-  D --> G["HF dataset<br/>open-geofm-mini-{5,10,20}K"]
-  F --> G
-  G --> H[TRL SFTTrainer<br/>LoRA Qwen2-VL]
-  H --> I[VLMEvalKit<br/>MathVista-GPS, GeoQA, ...]
-```
-
----
-
-## Quickstart
-
-```bash
-# 1. Host venv for the CPU phases (FormalGeo, sampling, render, NLG templates).
-uv sync --extra formal --extra nlg
-
-# 2. Smoke test the CPU pipeline (no GPU).
-uv run python scripts/00_verify_env.py --cpu-only
-uv run pytest -q
-
-# 3. Build the Blackwell training image (GPU phases).
-docker compose -f docker/docker-compose.yml build
-
-# 4. Verify GPU env from inside the container.
-docker compose -f docker/docker-compose.yml run --rm train
-
-# 5. Generate 100-sample smoke dataset, train, eval (full pipeline).
-uv run python scripts/02_generate_dataset.py --n 100 --renderer matplotlib --out data/smoke
-docker compose -f docker/docker-compose.yml run --rm train \
-    bash scripts/03_train.sh qwen2vl_2b_lora --dataset data/smoke --max-steps 50
-docker compose -f docker/docker-compose.yml run --rm train \
-    bash scripts/04_eval.sh qwen2vl_2b_lora outputs/qwen2vl-2b-lora
-```
-
-Full ten-week phase plan + Blackwell pain-log: see the **[wiki](https://github.com/danghoangnhan/open-geofm/wiki)**.
-
----
-
-## Hardware & software stack
-
-* **GPU**: NVIDIA RTX 5090 (Blackwell, sm_120, 32 GB).
-* **Driver**: 570+ (Linux) / 576+ (Windows).
-* **CUDA toolkit**: 12.8 or 12.9 — *not* 12.0 (no sm_120 kernels).
-* **Inside Docker** (NGC `pytorch:25.02-py3`):
-  - PyTorch ≥ 2.7 cu128 wheels.
-  - FlashAttention 2 from source. **FA4 cannot run on sm_120** (TMEM absent) — never try.
-  - bitsandbytes from source. **QLoRA gated** behind `OPEN_GEOFM_ENABLE_QLORA=1` until bnb sm_120 stabilises.
-  - vLLM ≥ 0.8.0 with `VLLM_FLASH_ATTN_VERSION=2`.
-* **Package manager**: [astral uv](https://github.com/astral-sh/uv) — `uv sync` / `uv run` everywhere.
-
----
-
-## Repository layout
-
-```
-open-geofm/
-├── src/open_geofm/{formal,sampling,render,nlg,dataset,train,eval}/
-├── notebooks/        # numbered, ≤30 min each, pedagogical
-├── scripts/          # 00_verify_env, 02_generate_dataset, 03_train, 04_eval
-├── docker/           # Dockerfile.blackwell + compose
-├── wiki/             # docs (synced to GitHub Wiki)
-├── tests/            # pytest, CPU-only, runs in CI
-└── pyproject.toml    # uv-managed
-```
+- [Project README / quickstart](wiki/README.md)
+- [Overview](wiki/00-Overview.md) · [Formal Language](wiki/01-Formal-Language.md) · [Condition Sampling](wiki/02-Condition-Sampling.md) · [Symbolic Verification](wiki/03-Symbolic-Verification.md)
+- [Diagram Rendering](wiki/04-Diagram-Rendering.md) · [Qwen2-VL Fine-tuning](wiki/05-Qwen2VL-Finetuning.md) · [Evaluation](wiki/06-Evaluation.md) · [Blackwell Setup Log](wiki/07-Blackwell-Setup-Log.md)
+- [Contributing](wiki/CONTRIBUTING.md)
 
 ---
 
 ## Citation
 
-If you use this implementation, please cite **both** the original GeoFM paper and this repository.
+Please cite **both** the original paper and this repository.
 
 ```bibtex
 @article{zhang2025geofm,
-  title  = {GeoFM: Geometry Foundation Model with Formal-Language Data Synthesis},
-  author = {Zhang, et al.},
+  title  = {GeoFM: Enhancing Geometric Reasoning of MLLMs via Synthetic Data Generation through Formal Language},
+  author = {Zhang, Yuhao and Hu, Dingxin and Yu, Tinghao and Liu, Hao and Liu, Yiting},
   journal= {arXiv:2510.27448},
   year   = {2025}
 }
@@ -120,23 +48,4 @@ If you use this implementation, please cite **both** the original GeoFM paper an
 }
 ```
 
-A Zenodo DOI is auto-minted on each tagged release via `CITATION.cff`.
-
----
-
-## Acknowledgements
-
-* **FormalGeo / FGPS** (BitSecret) — symbolic engine + the FormalGeo7K seed corpus.
-* **Qwen team** (Alibaba) — Qwen2-VL and Qwen2.5-VL base models.
-* **HuggingFace TRL + PEFT** — `SFTTrainer` and LoRA.
-* **VLMEvalKit** (OpenCompass) — multimodal evaluation harness.
-* **MAVIS / DFE-GPS / G-LLaVA / GeoX** — prior art that informed the design.
-
----
-
-## License
-
-* Code: **Apache-2.0** (see [LICENSE](LICENSE)).
-* Synthetic dataset releases on the Hugging Face Hub: **CC-BY-4.0**. Note that
-  seed problems originate from FormalGeo7K which has its own license — we do not
-  redistribute seed CDLs verbatim.
+License: Apache-2.0 (see [`LICENSE`](LICENSE)).

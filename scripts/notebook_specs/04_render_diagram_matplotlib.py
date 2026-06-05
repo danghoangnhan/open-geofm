@@ -156,7 +156,9 @@ if real_path.exists():
     side.paste(real_resized, (0, 20))
     side.paste(ours, (224 + 30, 20))
     print("LEFT: dataset diagram          RIGHT: matplotlib baseline (ours)")
-    display(side)  # noqa: F821 — Jupyter builtin
+    from IPython.display import display
+
+    display(side)
 else:
     print(f"{real_path} not found — run scripts/01_download_formalgeo7k.sh.")
 """,
