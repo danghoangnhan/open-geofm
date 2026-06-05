@@ -1827,52 +1827,17 @@ wheels = [
 name = "formalgeo"
 version = "0.0.6"
 source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version < '3.12.13' and sys_platform == 'darwin'",
-    "python_full_version < '3.12.13' and sys_platform == 'win32'",
-    "python_full_version < '3.12.13' and sys_platform == 'emscripten'",
-    "python_full_version < '3.12.13' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-]
 dependencies = [
-    { name = "chardet", marker = "python_full_version < '3.12.13'" },
-    { name = "func-timeout", marker = "python_full_version < '3.12.13'" },
-    { name = "graphviz", marker = "python_full_version < '3.12.13'" },
-    { name = "requests", marker = "python_full_version < '3.12.13'" },
-    { name = "sympy", marker = "python_full_version < '3.12.13'" },
-    { name = "tqdm", marker = "python_full_version < '3.12.13'" },
+    { name = "chardet" },
+    { name = "func-timeout" },
+    { name = "graphviz" },
+    { name = "requests" },
+    { name = "sympy" },
+    { name = "tqdm" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/1b/45/1a26343c27b1bbf349dde7f26af5a792a3ec53e7fbcc50c06ce024e92dce/formalgeo-0.0.6.tar.gz", hash = "sha256:8b822f431b53f38b7406635a28e736c8aace31932bc8f75f7696f32723d9cda8", size = 43658, upload-time = "2024-10-04T11:52:06.026Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/89/02/0199bbf82ff2b2de23eef9f856c064886e42fe35927dbfb6e6d6b5ad4e13/FormalGeo-0.0.6-py3-none-any.whl", hash = "sha256:e7c6122460c808f24a1002babf194fb7f94cdd16314712de70a6af6befbef136", size = 51320, upload-time = "2024-10-04T11:52:04.494Z" },
-]
-
-[[package]]
-name = "formalgeo"
-version = "2.2.2"
-source = { registry = "https://pypi.org/simple" }
-resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform == 'darwin'",
-    "python_full_version == '3.13.*' and sys_platform == 'darwin'",
-    "python_full_version >= '3.12.13' and python_full_version < '3.13' and sys_platform == 'darwin'",
-    "python_full_version >= '3.14' and sys_platform == 'win32'",
-    "python_full_version >= '3.14' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.14' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version == '3.13.*' and sys_platform == 'win32'",
-    "python_full_version == '3.13.*' and sys_platform == 'emscripten'",
-    "python_full_version == '3.13.*' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-    "python_full_version >= '3.12.13' and python_full_version < '3.13' and sys_platform == 'win32'",
-    "python_full_version >= '3.12.13' and python_full_version < '3.13' and sys_platform == 'emscripten'",
-    "python_full_version >= '3.12.13' and python_full_version < '3.13' and sys_platform != 'darwin' and sys_platform != 'emscripten' and sys_platform != 'win32'",
-]
-dependencies = [
-    { name = "func-timeout", marker = "python_full_version >= '3.12.13'" },
-    { name = "graphviz", marker = "python_full_version >= '3.12.13'" },
-    { name = "matplotlib", marker = "python_full_version >= '3.12.13'" },
-    { name = "sympy", marker = "python_full_version >= '3.12.13'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/32/a9/abd9109dacb9786d1860b36161787255f998ac0eafbc116cdc8f70ffade7/formalgeo-2.2.2.tar.gz", hash = "sha256:7c45bb062b681cb35f56500e71fc4b3b8c3387590a3460781d64ebeffb969b06", size = 61532, upload-time = "2026-04-08T11:38:40.231Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/56/03/751a7c91b72e59779ef6fd43f32b8c0287ea1abf03c9165356e3e7e35c98/formalgeo-2.2.2-py3-none-any.whl", hash = "sha256:1864aca428c1d79b3b00521fd9dd4bbb10627ff6fa9b0f5e4acf8795406f73cc", size = 41344, upload-time = "2026-04-08T11:38:38.449Z" },
 ]
 
 [[package]]
@@ -4472,8 +4437,7 @@ eval = [
     { name = "vlmeval" },
 ]
 formal = [
-    { name = "formalgeo", version = "0.0.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12.13'" },
-    { name = "formalgeo", version = "2.2.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12.13'" },
+    { name = "formalgeo" },
 ]
 nlg = [
     { name = "accelerate" },
@@ -4500,7 +4464,7 @@ requires-dist = [
     { name = "bitsandbytes", marker = "extra == 'train'" },
     { name = "black", marker = "extra == 'dev'" },
     { name = "datasets", marker = "extra == 'torch'" },
-    { name = "formalgeo", marker = "extra == 'formal'" },
+    { name = "formalgeo", marker = "extra == 'formal'", specifier = ">=0.0.6,<0.1" },
     { name = "func-timeout" },
     { name = "ipykernel", marker = "extra == 'dev'" },
     { name = "jupyter", marker = "extra == 'dev'" },

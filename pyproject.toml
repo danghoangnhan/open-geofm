@@ -47,7 +47,12 @@ eval  = ["vllm>=0.8.0", "openai", "vlmeval"]
 # transformers `.generate()` fallback (the no-vLLM / Blackwell-robust path).
 nlg   = ["openai", "transformers>=4.49", "accelerate", "torch>=2.7"]
 # Formal-engine wrappers — Python only, CPU.
-formal = ["formalgeo"]  # PyPI name to verify in Phase 1 setup
+# Pin to the 0.0.x API line: the wrappers use formalgeo 0.0.x modules
+# (formalgeo.parse.inverse_parse_m2f, formalgeo.solver.{forward,backward}_search,
+# formalgeo.solver.interactive, formalgeo.data.data). formalgeo 2.2.x is an
+# incompatible rewrite — and uv would otherwise resolve it on Python >= 3.12.13
+# (2.2.2's floor), breaking import on CI's interpreter.
+formal = ["formalgeo>=0.0.6,<0.1"]
 
 dev = [
   "pytest",
