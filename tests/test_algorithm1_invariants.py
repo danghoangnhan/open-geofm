@@ -79,7 +79,18 @@ def test_fallback_goal_from_trace_extracts_rhs() -> None:
         "perpendicular_to_right_angle(1,2) -> MeasureOfAngle(ABC) = 90",
         "pythagorean(3,4,5) -> LengthOfLine(AC) = 5",
     )
-    assert fallback_goal_from_trace(trace) == "LengthOfLine(AC) = 5"
+    # The fallback now canonicalises the infix `Pred(args) = v` form to the
+    # `Equal(Pred(args),v)` form so `value_of` / `goal_metric_for` accept it
+    # (fix for the fallback format mismatch, bug #11).
+    assert fallback_goal_from_trace(trace) == "Equal(LengthOfLine(AC),5)"
+
+
+def test_fallback_goal_from_trace_rejects_real_fgps_tuple_form() -> None:
+    """Real FGPS emits `str((name, premise, args))` steps with no `->`; the
+    fallback must raise (caller drops the sample) rather than emit garbage."""
+    trace = ("('pythagorean', (1, 2, 3), ('A', 'B', 'C'))",)
+    with pytest.raises(ValueError):
+        fallback_goal_from_trace(trace)
 
 
 def test_fallback_goal_from_trace_rejects_empty() -> None:

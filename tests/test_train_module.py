@@ -103,7 +103,9 @@ def test_collator_gather_image_token_ids_returns_resolved_ids() -> None:
 def test_collator_gather_image_token_ids_filters_unk() -> None:
     """A tokenizer that doesn't know `<|video_pad|>` returns `unk_token_id` —
     that must NOT end up in the mask list (would zero out real tokens)."""
-    tok = _StubTokenizer(vocab={"<|image_pad|>": 151655, "<|video_pad|>": _StubTokenizer.unk_token_id})
+    tok = _StubTokenizer(
+        vocab={"<|image_pad|>": 151655, "<|video_pad|>": _StubTokenizer.unk_token_id}
+    )
     ids = Qwen2VLDataCollator._gather_image_token_ids(_StubProcessor(tok))
     assert ids == (151655,)
 
@@ -316,8 +318,10 @@ def test_cli_dry_run_does_not_import_torch_or_trl() -> None:
     result = runner.invoke(
         mod.app,
         [
-            "--config", "qwen2vl_2b_lora",
-            "--dataset", "data/smoke",
+            "--config",
+            "qwen2vl_2b_lora",
+            "--dataset",
+            "data/smoke",
             "--dry-run",
         ],
     )
@@ -343,9 +347,7 @@ def test_resolve_dataset_local_jsonl(tmp_path: Path) -> None:
     img_path = tmp_path / "img.png"
     Image.new("RGB", (8, 8)).save(img_path)
     jsonl = tmp_path / "records.jsonl"
-    jsonl.write_text(
-        json.dumps({"image": str(img_path), "problem": "p", "solution": "s"}) + "\n"
-    )
+    jsonl.write_text(json.dumps({"image": str(img_path), "problem": "p", "solution": "s"}) + "\n")
 
     ds = mod._resolve_dataset(str(tmp_path))
     assert len(ds) == 1
@@ -359,9 +361,7 @@ def test_load_train_dataset_yields_messages(tmp_path: Path) -> None:
     img_path = tmp_path / "img.png"
     Image.new("RGB", (8, 8)).save(img_path)
     jsonl = tmp_path / "records.jsonl"
-    jsonl.write_text(
-        json.dumps({"image": str(img_path), "problem": "p", "solution": "s"}) + "\n"
-    )
+    jsonl.write_text(json.dumps({"image": str(img_path), "problem": "p", "solution": "s"}) + "\n")
 
     ds = mod._load_train_dataset(str(tmp_path))
     row = ds[0]
@@ -383,12 +383,10 @@ def test_vision_lr_trainer_factory_requires_trl() -> None:
     (not silently return a broken class)."""
     pytest.importorskip("typer")  # ensure host venv is configured
     mod = _load_train_module()
-    try:
-        import trl  # noqa: F401
-
-        cls = mod._make_vision_tower_lr_trainer_cls(1e-6)
-        assert cls.__name__ == "VisionTowerLRTrainer"
-    except ImportError:
+    if importlib.util.find_spec("trl") is None:
         # Host venv has no trl — factory must raise on call.
         with pytest.raises(ImportError):
             mod._make_vision_tower_lr_trainer_cls(1e-6)
+    else:
+        cls = mod._make_vision_tower_lr_trainer_cls(1e-6)
+        assert cls.__name__ == "VisionTowerLRTrainer"

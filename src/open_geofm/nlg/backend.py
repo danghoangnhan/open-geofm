@@ -1,29 +1,44 @@
 """Backend selector for the NLG rewriter.
 
-Blueprint §2 Phase 5: env var `OPEN_GEOFM_REWRITER` ∈ {"local", "openai"} chooses
-between vLLM-served Qwen2.5-7B-Instruct (local, free, ~16 GB VRAM) and OpenAI
-gpt-4o-mini (~$3 / 10K samples). Both expose the same `rewrite(prompt) -> str`.
+Env var `OPEN_GEOFM_REWRITER` ∈ {"local", "vllm", "hf", "openai"} (default
+"local") chooses between vLLM-served Qwen2.5-7B (local), a `transformers`
+pipeline (hf — the vLLM-free / Blackwell-robust fallback), and OpenAI
+gpt-4o-mini. All expose the same `rewrite(prompt) -> str`.
+
+The three rewriter modules import cleanly without their heavy deps (vllm /
+transformers / openai are reached via importlib on first use), so importing them
+eagerly here is safe in the CPU venv.
 """
 
 from __future__ import annotations
 
 import os
-from typing import Protocol
+from typing import Protocol, runtime_checkable
+
+from .rewrite_hf import HFRewriter
+from .rewrite_local import LocalRewriter
+from .rewrite_openai import OpenAIRewriter
+
+_REWRITERS: dict[str, type] = {
+    "local": LocalRewriter,
+    "vllm": LocalRewriter,
+    "hf": HFRewriter,
+    "openai": OpenAIRewriter,
+}
 
 
+@runtime_checkable
 class Rewriter(Protocol):
     def rewrite(self, prompt: str) -> str: ...
 
 
-def get_rewriter() -> Rewriter:
-    """Construct the rewriter selected by `OPEN_GEOFM_REWRITER` (default: `local`)."""
-    choice = os.environ.get("OPEN_GEOFM_REWRITER", "local").lower()
-    if choice == "local":
-        from .rewrite_local import LocalRewriter
-
-        return LocalRewriter()
-    if choice == "openai":
-        from .rewrite_openai import OpenAIRewriter
-
-        return OpenAIRewriter()
-    raise ValueError(f"Unknown OPEN_GEOFM_REWRITER={choice!r}; expected 'local' or 'openai'.")
+def get_rewriter(choice: str | None = None) -> Rewriter:
+    """Construct the rewriter selected by `choice` / `OPEN_GEOFM_REWRITER`."""
+    name = (choice or os.environ.get("OPEN_GEOFM_REWRITER", "local")).lower()
+    try:
+        cls = _REWRITERS[name]
+    except KeyError:
+        raise ValueError(
+            f"Unknown OPEN_GEOFM_REWRITER={name!r}; expected one of {sorted(_REWRITERS)}."
+        ) from None
+    return cls()

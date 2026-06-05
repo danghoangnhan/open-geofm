@@ -32,11 +32,12 @@ import os
 import time
 from collections.abc import Iterator
 from dataclasses import dataclass
+from functools import cache
 from pathlib import Path
 
 import typer
 
-from open_geofm.dataset.builder import build
+from open_geofm.dataset.builder import build, make_sample_id
 from open_geofm.sampling.algorithm1 import SyntheticSample
 
 log = logging.getLogger("open_geofm.generate")
@@ -79,6 +80,13 @@ def _make_rewriter(mode: str):
     """
     from open_geofm.nlg.templates import draft_nl
 
+    # Memoised so the (possibly ~16 GB vLLM) rewriter is built ONCE per process,
+    # not once per seed (fix for the per-seed model-reload OOM, bug #8).
+    return _build_rewriter(mode, draft_nl)
+
+
+@cache
+def _build_rewriter(mode: str, draft_nl):
     if mode == "template":
 
         def rewrite(p, answer: str) -> tuple[str, str]:
@@ -116,15 +124,23 @@ def _make_rewriter(mode: str):
 
 
 def _render_sample(sample: SyntheticSample, renderer, out_dir: Path, *, seed: int) -> Path:
-    """Render `sample` to `<out_dir>/<id>.png`. Returns the file path."""
-    sample_id = f"openfm-{sample.source_pid:05d}-{abs(hash((sample.goal, sample.added_metrics))) % 10**6:06d}"
+    """Render `sample` to `<out_dir>/<id>.png`. Returns the file path.
+
+    The id comes from the SHARED `make_sample_id`, so the PNG filename matches
+    the dataset record's image path exactly (renderer/builder id-mismatch fix).
+    """
+    sample_id = make_sample_id(sample)
     path = out_dir / f"{sample_id}.png"
-    # The renderer's input is the seed's construction CDL + the *new* metric set
-    # as the image_cdl. text_cdl-only metrics aren't drawable (they're algebraic).
-    image_cdl = tuple(m for m in sample.new_metrics if "Equal(" in m or "Value(" in m)
-    img = renderer.render(sample.construction_cdl, image_cdl, seed=seed)
+    img = renderer.render(sample.construction_cdl, sample.drawable_image_cdl(), seed=seed)
     img.save(path)
     return path
+
+
+def _render_seed_for(sample: SyntheticSample, base_seed: int) -> int:
+    """A distinct, deterministic render seed per sample so each gets its own
+    ±rotation / jitter augmentation (bug #26: all samples of one seed shared
+    the same augmentation)."""
+    return base_seed + int(make_sample_id(sample).rsplit("-", 1)[-1], 16)
 
 
 def _worker_init() -> None:
@@ -134,7 +150,12 @@ def _worker_init() -> None:
     default fans out to all cores. With multiple workers that's catastrophic —
     we want one BLAS thread per worker.
     """
-    for var in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+    for var in (
+        "OMP_NUM_THREADS",
+        "MKL_NUM_THREADS",
+        "OPENBLAS_NUM_THREADS",
+        "NUMEXPR_NUM_THREADS",
+    ):
         os.environ.setdefault(var, "1")
     # Re-init logging in the worker (Linux fork inherits it but Spawn doesn't).
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -190,7 +211,9 @@ def _process_seed(args: tuple[int, _WorkerConfig]) -> list[SyntheticSample]:
     out: list[SyntheticSample] = []
     for sample in batch:
         try:
-            _render_sample(sample, render_mod, cfg.image_dir, seed=cfg.seed + sample.source_pid)
+            _render_sample(
+                sample, render_mod, cfg.image_dir, seed=_render_seed_for(sample, cfg.seed)
+            )
         except Exception as e:
             log.warning("renderer failed for pid=%d: %s", sample.source_pid, e)
             continue

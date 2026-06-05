@@ -1,61 +1,65 @@
 """OpenAI gpt-4o-mini NLG rewriter.
 
-Blueprint §2 Phase 5. ~$3 for 10K samples (500 in + 300 out @ $0.15 / $0.60 per M tok).
-Requires `OPENAI_API_KEY`.
-
-The system prompt is the paper's Appendix C verbatim:
-    "Given a geometry problem and its answer hint, write a answer to the problem.
-     Ensure the answer is correct, concise, easy to understand, and written with
-     clarity and natural flow."
+Blueprint §2 Phase 5. The `openai` package is an optional dependency (the `nlg`
+extra) that may be absent in the CPU/CI venv, so it's reached via
+`importlib.import_module` *after* the API-key check rather than imported at module
+top — there is no bare in-function `import openai` statement.
 """
 
 from __future__ import annotations
 
+import importlib
 import os
 
-SYSTEM_PROMPT = (
-    "Given a geometry problem and its answer hint, write a answer to the problem. "
-    "Ensure the answer is correct, concise, easy to understand, and written with "
-    "clarity and natural flow."
+from ..config import (
+    DEFAULT_NLG_MAX_TOKENS,
+    DEFAULT_NLG_SYSTEM_PROMPT,
+    DEFAULT_NLG_TEMPERATURE,
+    DEFAULT_OPENAI_API_KEY_ENV,
+    DEFAULT_OPENAI_NLG_MODEL,
 )
+
+SYSTEM_PROMPT = DEFAULT_NLG_SYSTEM_PROMPT
 
 
 class OpenAIRewriter:
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
-        temperature: float = 0.7,
-        max_tokens: int = 512,
-    ):
+        model: str = DEFAULT_OPENAI_NLG_MODEL,
+        temperature: float = DEFAULT_NLG_TEMPERATURE,
+        max_tokens: int = DEFAULT_NLG_MAX_TOKENS,
+        *,
+        api_key_env: str = DEFAULT_OPENAI_API_KEY_ENV,
+        system_prompt: str = SYSTEM_PROMPT,
+    ) -> None:
         self.model = model
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.api_key_env = api_key_env
+        self.system_prompt = system_prompt
         self._client = None
 
     def _ensure_client(self):
         if self._client is not None:
             return self._client
-        # Cheap env-var check first so we fail fast in CI (no openai install needed).
-        if not os.environ.get("OPENAI_API_KEY"):
-            raise RuntimeError("OPENAI_API_KEY env var not set.")
+        # Cheap key check first so we fail fast in CI without needing openai installed.
+        if not os.environ.get(self.api_key_env):
+            raise RuntimeError(f"{self.api_key_env} env var not set.")
         try:
-            from openai import OpenAI  # type: ignore[import-not-found]
+            openai = importlib.import_module("openai")
         except ImportError as e:
-            raise RuntimeError("Install with `uv sync --extra nlg` to use the OpenAI backend.") from e
-        self._client = OpenAI()
+            raise RuntimeError(
+                "Install with `uv sync --extra nlg` to use the OpenAI backend."
+            ) from e
+        self._client = openai.OpenAI()
         return self._client
 
     def rewrite(self, prompt: str) -> str:
-        """Smooth a Phase-5 step-1 template draft into natural prose.
-
-        `prompt` is expected to contain both the problem statement and the answer
-        hint (the caller stitches them with `templates.draft_nl` + the FGPS answer).
-        """
         client = self._ensure_client()
         resp = client.chat.completions.create(
             model=self.model,
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": self.system_prompt},
                 {"role": "user", "content": prompt},
             ],
             temperature=self.temperature,
